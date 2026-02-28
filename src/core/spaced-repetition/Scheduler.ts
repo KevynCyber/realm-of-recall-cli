@@ -7,7 +7,11 @@ import {
   type Card as FSRSCard,
   type Grade,
 } from "ts-fsrs";
-import { AnswerQuality, type ScheduleData } from "../../types/index.js";
+import {
+  AnswerQuality,
+  ConfidenceLevel,
+  type ScheduleData,
+} from "../../types/index.js";
 
 /**
  * FSRS spaced repetition scheduler.
@@ -23,6 +27,28 @@ const QUALITY_TO_RATING: Record<AnswerQuality, Grade> = {
   [AnswerQuality.Wrong]: Rating.Again,
   [AnswerQuality.Timeout]: Rating.Again,
 };
+
+const CONFIDENCE_TO_RATING: Record<ConfidenceLevel, Grade> = {
+  [ConfidenceLevel.Guess]: Rating.Hard,
+  [ConfidenceLevel.Knew]: Rating.Good,
+  [ConfidenceLevel.Instant]: Rating.Easy,
+};
+
+export function getEffectiveRating(
+  quality: AnswerQuality,
+  confidence?: ConfidenceLevel,
+): Grade {
+  if (quality === AnswerQuality.Wrong || quality === AnswerQuality.Timeout) {
+    return Rating.Again;
+  }
+  if (quality === AnswerQuality.Partial) {
+    return Rating.Hard;
+  }
+  if (confidence !== undefined) {
+    return CONFIDENCE_TO_RATING[confidence];
+  }
+  return QUALITY_TO_RATING[quality];
+}
 
 const STATE_TO_STRING: Record<State, ScheduleData["state"]> = {
   [State.New]: "new",
@@ -58,8 +84,9 @@ export function createInitialSchedule(cardId: string): ScheduleData {
 export function updateSchedule(
   schedule: ScheduleData,
   quality: AnswerQuality,
+  confidence?: ConfidenceLevel,
 ): ScheduleData {
-  const rating = QUALITY_TO_RATING[quality];
+  const rating = getEffectiveRating(quality, confidence);
   const now = new Date();
 
   // Reconstruct a ts-fsrs Card from our ScheduleData

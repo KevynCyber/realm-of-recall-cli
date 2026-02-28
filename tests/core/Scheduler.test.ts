@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { Rating } from "ts-fsrs";
 import {
   createInitialSchedule,
   updateSchedule,
   isDueForReview,
   getRetrievability,
+  getEffectiveRating,
 } from "../../src/core/spaced-repetition/Scheduler.js";
-import { AnswerQuality } from "../../src/types/index.js";
+import { AnswerQuality, ConfidenceLevel } from "../../src/types/index.js";
 
 describe("FSRS Scheduler", () => {
   beforeEach(() => {
@@ -213,6 +215,74 @@ describe("FSRS Scheduler", () => {
       // Both map to Rating.Again, so difficulty should be the same
       expect(afterWrong.difficulty).toBe(afterTimeout.difficulty);
       expect(afterWrong.stability).toBe(afterTimeout.stability);
+    });
+  });
+
+  describe("getEffectiveRating", () => {
+    it("Perfect + Instant → Easy", () => {
+      expect(getEffectiveRating(AnswerQuality.Perfect, ConfidenceLevel.Instant)).toBe(Rating.Easy);
+    });
+
+    it("Perfect + Knew → Good", () => {
+      expect(getEffectiveRating(AnswerQuality.Perfect, ConfidenceLevel.Knew)).toBe(Rating.Good);
+    });
+
+    it("Perfect + Guess → Hard", () => {
+      expect(getEffectiveRating(AnswerQuality.Perfect, ConfidenceLevel.Guess)).toBe(Rating.Hard);
+    });
+
+    it("Correct + Guess → Hard", () => {
+      expect(getEffectiveRating(AnswerQuality.Correct, ConfidenceLevel.Guess)).toBe(Rating.Hard);
+    });
+
+    it("Wrong + any confidence → Again", () => {
+      expect(getEffectiveRating(AnswerQuality.Wrong, ConfidenceLevel.Instant)).toBe(Rating.Again);
+      expect(getEffectiveRating(AnswerQuality.Wrong, ConfidenceLevel.Knew)).toBe(Rating.Again);
+      expect(getEffectiveRating(AnswerQuality.Wrong, ConfidenceLevel.Guess)).toBe(Rating.Again);
+    });
+
+    it("Timeout + any confidence → Again", () => {
+      expect(getEffectiveRating(AnswerQuality.Timeout, ConfidenceLevel.Instant)).toBe(Rating.Again);
+    });
+
+    it("Partial + any confidence → Hard", () => {
+      expect(getEffectiveRating(AnswerQuality.Partial, ConfidenceLevel.Instant)).toBe(Rating.Hard);
+      expect(getEffectiveRating(AnswerQuality.Partial, ConfidenceLevel.Knew)).toBe(Rating.Hard);
+      expect(getEffectiveRating(AnswerQuality.Partial, ConfidenceLevel.Guess)).toBe(Rating.Hard);
+    });
+
+    it("undefined confidence → uses default QUALITY_TO_RATING mapping", () => {
+      expect(getEffectiveRating(AnswerQuality.Perfect)).toBe(Rating.Easy);
+      expect(getEffectiveRating(AnswerQuality.Correct)).toBe(Rating.Good);
+      expect(getEffectiveRating(AnswerQuality.Partial)).toBe(Rating.Hard);
+      expect(getEffectiveRating(AnswerQuality.Wrong)).toBe(Rating.Again);
+      expect(getEffectiveRating(AnswerQuality.Timeout)).toBe(Rating.Again);
+    });
+  });
+
+  describe("updateSchedule with confidence", () => {
+    it("confidence affects scheduling differently than without", () => {
+      const s1 = createInitialSchedule("card1");
+      const s2 = createInitialSchedule("card2");
+
+      // Perfect without confidence → Easy rating (default)
+      const withoutConfidence = updateSchedule(s1, AnswerQuality.Perfect);
+      // Perfect with Guess confidence → Hard rating
+      const withGuess = updateSchedule(s2, AnswerQuality.Perfect, ConfidenceLevel.Guess);
+
+      // Hard rating produces higher difficulty than Easy rating
+      expect(withGuess.difficulty).toBeGreaterThan(withoutConfidence.difficulty);
+    });
+
+    it("backward compatible: no confidence gives same result as before", () => {
+      const s1 = createInitialSchedule("card1");
+      const s2 = createInitialSchedule("card2");
+
+      const withoutConfidence = updateSchedule(s1, AnswerQuality.Correct);
+      const withUndefined = updateSchedule(s2, AnswerQuality.Correct, undefined);
+
+      expect(withoutConfidence.difficulty).toBe(withUndefined.difficulty);
+      expect(withoutConfidence.stability).toBe(withUndefined.stability);
     });
   });
 });
