@@ -78,9 +78,11 @@ describe("HubScreen", () => {
     const frame = lastFrame();
     expect(frame).toContain("Adventure");
     expect(frame).toContain("Quick Review");
+    expect(frame).toContain("Dungeon Run");
+    expect(frame).toContain("Daily Challenge");
     expect(frame).toContain("Inventory");
     expect(frame).toContain("World Map");
-    expect(frame).toContain("Import Deck");
+    expect(frame).toContain("Achievements");
     expect(frame).toContain("Stats");
     expect(frame).toContain("Manage Decks");
   });
@@ -132,7 +134,7 @@ describe("HubScreen", () => {
   });
 
   it("navigates to correct screen for each number key", async () => {
-    const screens = ["combat", "review", "inventory", "map", "import", "stats", "decks"];
+    const screens = ["combat", "review", "dungeon", "daily_challenge", "inventory", "map", "achievements", "stats", "decks"];
     for (let i = 0; i < screens.length; i++) {
       const onNavigate = vi.fn();
       const { stdin } = render(

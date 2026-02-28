@@ -11,11 +11,13 @@ interface Props {
 const MENU_ITEMS = [
   { key: "1", label: "Adventure", description: "Enter a zone and battle enemies", screen: "combat" },
   { key: "2", label: "Quick Review", description: "Review due cards without combat", screen: "review" },
-  { key: "3", label: "Inventory", description: "Manage your equipment", screen: "inventory" },
-  { key: "4", label: "World Map", description: "View zone progression", screen: "map" },
-  { key: "5", label: "Import Deck", description: "Add new flashcard decks", screen: "import" },
-  { key: "6", label: "Stats", description: "View your statistics", screen: "stats" },
-  { key: "7", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
+  { key: "3", label: "Dungeon Run", description: "5-floor gauntlet with random events", screen: "dungeon" },
+  { key: "4", label: "Daily Challenge", description: "Today's seeded challenge", screen: "daily_challenge" },
+  { key: "5", label: "Inventory", description: "Manage your equipment", screen: "inventory" },
+  { key: "6", label: "World Map", description: "View zone progression", screen: "map" },
+  { key: "7", label: "Achievements", description: "Track your accomplishments", screen: "achievements" },
+  { key: "8", label: "Stats", description: "View your statistics", screen: "stats" },
+  { key: "9", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
 ] as const;
 
 export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {

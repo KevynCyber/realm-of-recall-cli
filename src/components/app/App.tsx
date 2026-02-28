@@ -10,6 +10,9 @@ import { InventoryScreen } from "../screens/InventoryScreen.js";
 import { MapScreen } from "../screens/MapScreen.js";
 import { StatsScreen } from "../screens/StatsScreen.js";
 import { DeckScreen } from "../screens/DeckScreen.js";
+import { AchievementScreen } from "../screens/AchievementScreen.js";
+import { DailyChallengeScreen } from "../screens/DailyChallengeScreen.js";
+import { DungeonRunScreen } from "../screens/DungeonRunScreen.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
 import type { ReviewResult } from "../review/ReviewScreen.js";
 import { ReviewSummary } from "../review/ReviewSummary.js";
@@ -21,6 +24,7 @@ import { StatsRepository } from "../../data/repositories/StatsRepository.js";
 import { EquipmentRepository } from "../../data/repositories/EquipmentRepository.js";
 import { ZoneRepository } from "../../data/repositories/ZoneRepository.js";
 import { ReflectionRepository } from "../../data/repositories/ReflectionRepository.js";
+import { AchievementRepository } from "../../data/repositories/AchievementRepository.js";
 import { createNewPlayer } from "../../core/player/PlayerStats.js";
 import { generateEnemy } from "../../core/combat/EnemyGenerator.js";
 import {
@@ -42,6 +46,13 @@ import {
 import {
   calculateTrend,
 } from "../../core/analytics/MarginalGains.js";
+import { checkNewAchievements } from "../../core/progression/Achievements.js";
+import type { AchievementState } from "../../core/progression/Achievements.js";
+import {
+  getDailySeed,
+  generateDailyChallenge,
+} from "../../core/combat/DailyChallenge.js";
+import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
 import type {
   Player,
   Equipment,
@@ -65,7 +76,10 @@ export type Screen =
   | "inventory"
   | "map"
   | "stats"
-  | "decks";
+  | "decks"
+  | "achievements"
+  | "daily_challenge"
+  | "dungeon";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -124,6 +138,12 @@ export default function App() {
   const [reviewXp, setReviewXp] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
+
+  // Achievement state
+  const [unlockedAchievementKeys, setUnlockedAchievementKeys] = useState<Set<string>>(new Set());
+
+  // Daily challenge state
+  const [dailyChallengeConfig, setDailyChallengeConfig] = useState<DailyChallengeConfig | null>(null);
 
   // Reflection flow state
   const [reflectionAccuracy, setReflectionAccuracy] = useState(0);
@@ -186,6 +206,47 @@ export default function App() {
       }
     } catch {
       // ignore — show title screen
+    }
+  }, []);
+
+  const checkAchievements = useCallback((updatedPlayer: Player) => {
+    try {
+      const db = getDatabase();
+      const achievementRepo = new AchievementRepository(db);
+      const cardRepo = new CardRepository(db);
+      const zoneRepo = new ZoneRepository(db);
+      const statsRepo = new StatsRepository(db);
+
+      const unlockedKeys = achievementRepo.getUnlockedKeys();
+      const decks = cardRepo.getAllDecks();
+      const zones = zoneRepo.getZones();
+      const zonesCleared = zones.filter((z) => z.bossDefeated).length;
+
+      // Count mastered cards across all decks
+      let totalMastered = 0;
+      let totalCards = 0;
+      for (const deck of decks) {
+        const mastery = statsRepo.getDeckMasteryStats(deck.id);
+        totalMastered += mastery.reviewCount;
+        totalCards += mastery.total;
+      }
+
+      const state: AchievementState = {
+        player: updatedPlayer,
+        totalMasteredCards: totalMastered,
+        totalCards,
+        perfectStreak: 0, // Would need to track this separately
+        zonesCleared,
+        totalZones: zones.length,
+        decksOwned: decks.length,
+      };
+
+      const newAchievements = checkNewAchievements(state, unlockedKeys);
+      for (const achievement of newAchievements) {
+        achievementRepo.unlock(achievement.key, achievement.title, achievement.description);
+      }
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -389,6 +450,37 @@ export default function App() {
           }
           break;
         }
+        case "achievements": {
+          try {
+            const db = getDatabase();
+            const achievementRepo = new AchievementRepository(db);
+            setUnlockedAchievementKeys(achievementRepo.getUnlockedKeys());
+            setScreen("achievements");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "daily_challenge": {
+          if (!player) break;
+          try {
+            const db = getDatabase();
+            const cardRepo = new CardRepository(db);
+            const allCards = cardRepo.getAllCards();
+            const seed = getDailySeed();
+            const config = generateDailyChallenge(seed, allCards, player.level);
+            setDailyChallengeConfig(config);
+            setScreen("daily_challenge");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "dungeon": {
+          if (!player) break;
+          setScreen("dungeon");
+          break;
+        }
         case "import": {
           // Import is CLI-only (ror import <file>)
           break;
@@ -458,6 +550,7 @@ export default function App() {
           );
         }
 
+        checkAchievements(updated);
         refreshCardsDue();
         setScreen("hub");
       } catch (err: any) {
@@ -465,7 +558,7 @@ export default function App() {
         setScreen("hub");
       }
     },
-    [player, combatCards, refreshCardsDue],
+    [player, combatCards, refreshCardsDue, checkAchievements],
   );
 
   const handleReviewComplete = useCallback(
@@ -688,7 +781,8 @@ export default function App() {
       screen === "title" ||
       screen === "combat" ||
       screen === "review" ||
-      screen === "reflection"
+      screen === "reflection" ||
+      screen === "dungeon"
     )
       return;
     if (input === "q") {
@@ -804,6 +898,73 @@ export default function App() {
             accuracyTrend={accuracyTrend}
             speedTrend={speedTrend}
             wisdomXp={player.wisdomXp}
+          />
+        ) : null;
+      case "achievements":
+        return (
+          <AchievementScreen
+            unlockedKeys={unlockedAchievementKeys}
+            onBack={() => setScreen("hub")}
+          />
+        );
+      case "daily_challenge":
+        return player && dailyChallengeConfig ? (
+          <DailyChallengeScreen
+            config={dailyChallengeConfig}
+            alreadyCompleted={player.dailyChallengeCompleted}
+            previousScore={player.dailyChallengeScore}
+            onStartChallenge={() => {
+              // Prepare combat with daily challenge cards and enemy
+              if (!player) return;
+              try {
+                const db = getDatabase();
+                const cardRepo = new CardRepository(db);
+                const cards = dailyChallengeConfig.cardIds
+                  .map((id) => cardRepo.getCard(id))
+                  .filter((c): c is Card => c !== undefined);
+                if (cards.length === 0) return;
+                setCombatCards(cards);
+                setCombatEnemy(dailyChallengeConfig.enemy);
+                const equipRepo = new EquipmentRepository(db);
+                setEquippedItems(equipRepo.getEquipped());
+                setScreen("combat");
+              } catch {
+                // ignore
+              }
+            }}
+            onBack={() => setScreen("hub")}
+          />
+        ) : null;
+      case "dungeon":
+        return player ? (
+          <DungeonRunScreen
+            playerHp={player.hp}
+            playerMaxHp={player.maxHp}
+            playerLevel={player.level}
+            onFloorCombat={() => {
+              // Floor combat callback - currently handled by the DungeonRunScreen itself
+            }}
+            onComplete={(result) => {
+              if (!player) return;
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = {
+                  ...player,
+                  gold: player.gold + result.gold,
+                  xp: player.xp + result.xp,
+                };
+                const leveled = applyLevelUp(updated);
+                playerRepo.updatePlayer(leveled);
+                setPlayer(leveled);
+                checkAchievements(leveled);
+                refreshCardsDue();
+              } catch {
+                // ignore
+              }
+              setScreen("hub");
+            }}
+            onBack={() => setScreen("hub")}
           />
         ) : null;
       default:
