@@ -1,0 +1,67 @@
+// Card types
+export enum CardType {
+  Basic = "basic",
+  MultipleChoice = "multiple_choice",
+  ClozeDeletion = "cloze_deletion",
+}
+
+export enum AnswerQuality {
+  Perfect = "perfect",
+  Correct = "correct",
+  Partial = "partial",
+  Wrong = "wrong",
+  Timeout = "timeout",
+}
+
+export enum CardDifficulty {
+  Easy = "easy",
+  Medium = "medium",
+  Hard = "hard",
+}
+
+export interface Card {
+  id: string;
+  front: string;
+  back: string;
+  acceptableAnswers: string[];
+  type: CardType;
+  deckId: string;
+}
+
+export interface Deck {
+  id: string;
+  name: string;
+  description: string;
+  createdAt: string;
+}
+
+export interface RecallAttempt {
+  cardId: string;
+  timestamp: number;
+  responseTime: number;
+  quality: AnswerQuality;
+  wasTimed: boolean;
+}
+
+export interface CardStats {
+  totalAttempts: number;
+  correctCount: number;
+  consecutiveCorrect: number;
+  bestStreak: number;
+  totalResponseTime: number;
+}
+
+// SM-2 scheduling
+export interface ScheduleData {
+  cardId: string;
+  easeFactor: number;
+  intervalDays: number;
+  repetitions: number;
+  nextReviewAt: string; // ISO date string
+}
+
+// Cloze parsing
+export interface ClozeResult {
+  displayText: string;
+  answers: string[];
+}

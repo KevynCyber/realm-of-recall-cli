@@ -1,0 +1,56 @@
+{
+  "name": "World Geography",
+  "description": "Capital cities of the world",
+  "cards": [
+    {
+      "front": "What is the capital of France?",
+      "back": "Paris",
+      "acceptableAnswers": ["Paris"]
+    },
+    {
+      "front": "What is the capital of Japan?",
+      "back": "Tokyo",
+      "acceptableAnswers": ["Tokyo"]
+    },
+    {
+      "front": "What is the capital of Brazil?",
+      "back": "Brasília",
+      "acceptableAnswers": ["Brasilia", "Brasília"]
+    },
+    {
+      "front": "What is the capital of Australia?",
+      "back": "Canberra",
+      "acceptableAnswers": ["Canberra"]
+    },
+    {
+      "front": "What is the capital of Egypt?",
+      "back": "Cairo",
+      "acceptableAnswers": ["Cairo"]
+    },
+    {
+      "front": "What is the capital of Canada?",
+      "back": "Ottawa",
+      "acceptableAnswers": ["Ottawa"]
+    },
+    {
+      "front": "What is the capital of Germany?",
+      "back": "Berlin",
+      "acceptableAnswers": ["Berlin"]
+    },
+    {
+      "front": "What is the capital of Italy?",
+      "back": "Rome",
+      "acceptableAnswers": ["Rome", "Roma"]
+    },
+    {
+      "front": "What is the capital of South Korea?",
+      "back": "Seoul",
+      "acceptableAnswers": ["Seoul"]
+    },
+    {
+      "front": "What is the capital of India?",
+      "back": "New Delhi",
+      "acceptableAnswers": ["New Delhi", "Delhi"]
+    }
+  ]
+}
