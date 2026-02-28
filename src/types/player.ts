@@ -67,5 +67,11 @@ export interface Player {
   combatWins: number;
   combatLosses: number;
   wisdomXp: number;
+  ascensionLevel: number;
+  skillPoints: number;
+  dailyChallengeSeed: string | null;
+  dailyChallengeCompleted: boolean;
+  dailyChallengeScore: number;
+  dailyChallengeDate: string | null;
   createdAt: string;
 }

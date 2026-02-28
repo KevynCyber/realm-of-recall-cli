@@ -28,6 +28,12 @@ const testPlayer: Player = {
   combatWins: 0,
   combatLosses: 0,
   wisdomXp: 0,
+  ascensionLevel: 0,
+  skillPoints: 0,
+  dailyChallengeSeed: null,
+  dailyChallengeCompleted: false,
+  dailyChallengeScore: 0,
+  dailyChallengeDate: null,
   createdAt: new Date().toISOString(),
 };
 

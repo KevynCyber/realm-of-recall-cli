@@ -1,0 +1,57 @@
+/**
+ * Diminishing-cues hint generator for progressive recall scaffolding.
+ * Based on Fiechter & Benjamin (2017) research showing that diminishing cues
+ * enhance memory when standard retrieval practice fails.
+ */
+
+/**
+ * Generate a hint for the given answer at the specified reveal level.
+ * Level 0: first letter only (e.g., "P________")
+ * Level 1: first letter + every 3rd letter revealed
+ * Level 2: first letter + every other letter revealed
+ * Level 3: full answer (fallback)
+ *
+ * Spaces are always revealed to preserve word structure.
+ */
+export function generateHint(answer: string, level: number): string {
+  if (level >= 3) return answer;
+  if (answer.length === 0) return "";
+
+  const chars = answer.split("");
+  return chars
+    .map((char, index) => {
+      // Always reveal spaces to show word structure
+      if (char === " ") return " ";
+      // Always reveal first character
+      if (index === 0) return char;
+
+      switch (level) {
+        case 0:
+          // Level 0: first letter only
+          return "_";
+        case 1:
+          // Level 1: first letter + every 3rd letter
+          return index % 3 === 0 ? char : "_";
+        case 2:
+          // Level 2: first letter + every other letter
+          return index % 2 === 0 ? char : "_";
+        default:
+          return "_";
+      }
+    })
+    .join("");
+}
+
+/**
+ * Get the maximum hint level available (always 3).
+ */
+export function getMaxHintLevel(): number {
+  return 3;
+}
+
+/**
+ * Check if a hint level reveals the full answer.
+ */
+export function isFullReveal(level: number): boolean {
+  return level >= 3;
+}
