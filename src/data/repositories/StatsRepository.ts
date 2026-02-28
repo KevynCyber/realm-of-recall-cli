@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { RecallAttempt, LegacyScheduleData } from "../../types/index.js";
+import type { RecallAttempt, ScheduleData } from "../../types/index.js";
 import { AnswerQuality } from "../../types/index.js";
 
 export class StatsRepository {
@@ -16,7 +16,7 @@ export class StatsRepository {
   recordAttempt(
     cardId: string,
     attempt: RecallAttempt,
-    schedule: LegacyScheduleData,
+    schedule: ScheduleData,
   ): void {
     const tx = this.db.transaction(() => {
       // Insert attempt
@@ -51,18 +51,24 @@ export class StatsRepository {
               consecutive_correct = consecutive_correct + 1,
               best_streak = MAX(best_streak, consecutive_correct + 1),
               total_response_time = total_response_time + ?,
-              ease_factor = ?,
-              interval_days = ?,
+              difficulty = ?,
+              stability = ?,
               repetitions = ?,
+              lapses = ?,
+              card_state = ?,
+              last_review_at = ?,
               next_review_at = ?
             WHERE card_id = ?`,
           )
           .run(
             attempt.responseTime,
-            schedule.easeFactor,
-            schedule.intervalDays,
-            schedule.repetitions,
-            schedule.nextReviewAt,
+            schedule.difficulty,
+            schedule.stability,
+            schedule.reps,
+            schedule.lapses,
+            schedule.state,
+            schedule.lastReview,
+            schedule.due,
             cardId,
           );
       } else {
@@ -72,18 +78,24 @@ export class StatsRepository {
               total_attempts = total_attempts + 1,
               consecutive_correct = 0,
               total_response_time = total_response_time + ?,
-              ease_factor = ?,
-              interval_days = ?,
+              difficulty = ?,
+              stability = ?,
               repetitions = ?,
+              lapses = ?,
+              card_state = ?,
+              last_review_at = ?,
               next_review_at = ?
             WHERE card_id = ?`,
           )
           .run(
             attempt.responseTime,
-            schedule.easeFactor,
-            schedule.intervalDays,
-            schedule.repetitions,
-            schedule.nextReviewAt,
+            schedule.difficulty,
+            schedule.stability,
+            schedule.reps,
+            schedule.lapses,
+            schedule.state,
+            schedule.lastReview,
+            schedule.due,
             cardId,
           );
       }
@@ -92,19 +104,23 @@ export class StatsRepository {
     tx();
   }
 
-  getSchedule(cardId: string): LegacyScheduleData | undefined {
+  getSchedule(cardId: string): ScheduleData | undefined {
     const row = this.db
       .prepare(
-        "SELECT ease_factor, interval_days, repetitions, next_review_at FROM recall_stats WHERE card_id = ?",
+        `SELECT difficulty, stability, repetitions, lapses, card_state, last_review_at, next_review_at
+         FROM recall_stats WHERE card_id = ?`,
       )
       .get(cardId) as any | undefined;
     if (!row) return undefined;
     return {
       cardId,
-      easeFactor: row.ease_factor,
-      intervalDays: row.interval_days,
-      repetitions: row.repetitions,
-      nextReviewAt: row.next_review_at,
+      difficulty: row.difficulty,
+      stability: row.stability,
+      reps: row.repetitions,
+      lapses: row.lapses,
+      state: row.card_state,
+      due: row.next_review_at,
+      lastReview: row.last_review_at,
     };
   }
 
@@ -134,6 +150,114 @@ export class StatsRepository {
 
     const rows = this.db.prepare(query).all(...params) as any[];
     return rows.map((r) => r.id);
+  }
+
+  getDueCards(deckId?: string, limit?: number): string[] {
+    const now = new Date().toISOString();
+    const effectiveLimit = limit ?? 9999;
+
+    if (deckId) {
+      // Due cards (non-new with review time passed) + new cards, up to limit
+      const query = `
+        SELECT id FROM (
+          SELECT c.id, rs.next_review_at FROM cards c
+          JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE c.deck_id = ?
+            AND rs.card_state != 'new'
+            AND rs.next_review_at <= ?
+          UNION ALL
+          SELECT c.id, NULL as next_review_at FROM cards c
+          LEFT JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE c.deck_id = ?
+            AND (rs.card_state IS NULL OR rs.card_state = 'new')
+        )
+        ORDER BY next_review_at ASC
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(deckId, now, deckId, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else {
+      const query = `
+        SELECT id FROM (
+          SELECT c.id, rs.next_review_at FROM cards c
+          JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE rs.card_state != 'new'
+            AND rs.next_review_at <= ?
+          UNION ALL
+          SELECT c.id, NULL as next_review_at FROM cards c
+          LEFT JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE rs.card_state IS NULL OR rs.card_state = 'new'
+        )
+        ORDER BY next_review_at ASC
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(now, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    }
+  }
+
+  getCardsByState(deckId: string, state: string): string[] {
+    // Cards with no recall_stats row are implicitly 'new'
+    if (state === "new") {
+      const rows = this.db
+        .prepare(
+          `SELECT c.id FROM cards c
+           LEFT JOIN recall_stats rs ON rs.card_id = c.id
+           WHERE c.deck_id = ?
+             AND (rs.card_state IS NULL OR rs.card_state = 'new')`,
+        )
+        .all(deckId) as any[];
+      return rows.map((r) => r.id);
+    }
+
+    const rows = this.db
+      .prepare(
+        `SELECT c.id FROM cards c
+         JOIN recall_stats rs ON rs.card_id = c.id
+         WHERE c.deck_id = ? AND rs.card_state = ?`,
+      )
+      .all(deckId, state) as any[];
+    return rows.map((r) => r.id);
+  }
+
+  getDeckMasteryStats(deckId: string): {
+    total: number;
+    newCount: number;
+    learningCount: number;
+    reviewCount: number;
+    relearnCount: number;
+  } {
+    const totalRow = this.db
+      .prepare("SELECT COUNT(*) as count FROM cards WHERE deck_id = ?")
+      .get(deckId) as any;
+    const total = totalRow.count;
+
+    const statsRows = this.db
+      .prepare(
+        `SELECT rs.card_state, COUNT(*) as count
+         FROM cards c
+         JOIN recall_stats rs ON rs.card_id = c.id
+         WHERE c.deck_id = ?
+         GROUP BY rs.card_state`,
+      )
+      .all(deckId) as any[];
+
+    const counts: Record<string, number> = {};
+    for (const row of statsRows) {
+      counts[row.card_state] = row.count;
+    }
+
+    // Cards without recall_stats are 'new'
+    const trackedCount = statsRows.reduce((sum: number, r: any) => sum + r.count, 0);
+    const untrackedNew = total - trackedCount;
+
+    return {
+      total,
+      newCount: (counts["new"] ?? 0) + untrackedNew,
+      learningCount: counts["learning"] ?? 0,
+      reviewCount: counts["review"] ?? 0,
+      relearnCount: counts["relearning"] ?? 0,
+    };
   }
 
   getAttempts(cardId: string): RecallAttempt[] {

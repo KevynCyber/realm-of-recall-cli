@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import { getInMemoryDatabase } from "../../src/data/database.js";
 import { CardRepository } from "../../src/data/repositories/CardRepository.js";
 import { StatsRepository } from "../../src/data/repositories/StatsRepository.js";
-import { AnswerQuality, CardType, type Card, type Deck } from "../../src/types/index.js";
+import { AnswerQuality, CardType, type Card, type Deck, type ScheduleData } from "../../src/types/index.js";
 
 let db: Database.Database;
 let cardRepo: CardRepository;
@@ -24,6 +24,20 @@ const testCard: Card = {
   type: CardType.Basic,
   deckId: "deck1",
 };
+
+function makeSchedule(overrides?: Partial<ScheduleData>): ScheduleData {
+  return {
+    cardId: "card1",
+    difficulty: 5.0,
+    stability: 1.0,
+    reps: 1,
+    lapses: 0,
+    state: "learning",
+    due: new Date(Date.now() + 86400000).toISOString(),
+    lastReview: new Date().toISOString(),
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   db = getInMemoryDatabase();
@@ -82,6 +96,8 @@ describe("StatsRepository", () => {
   });
 
   it("records an attempt and updates schedule", () => {
+    const schedule = makeSchedule({ reps: 1 });
+
     statsRepo.recordAttempt(
       "card1",
       {
@@ -91,18 +107,14 @@ describe("StatsRepository", () => {
         quality: AnswerQuality.Correct,
         wasTimed: false,
       },
-      {
-        cardId: "card1",
-        easeFactor: 2.5,
-        intervalDays: 1,
-        repetitions: 1,
-        nextReviewAt: new Date(Date.now() + 86400000).toISOString(),
-      },
+      schedule,
     );
 
-    const schedule = statsRepo.getSchedule("card1");
-    expect(schedule?.repetitions).toBe(1);
-    expect(schedule?.intervalDays).toBe(1);
+    const retrieved = statsRepo.getSchedule("card1");
+    expect(retrieved?.reps).toBe(1);
+    expect(retrieved?.state).toBe("learning");
+    expect(retrieved?.difficulty).toBe(5.0);
+    expect(retrieved?.stability).toBe(1.0);
   });
 
   it("returns due card IDs", () => {
@@ -121,13 +133,7 @@ describe("StatsRepository", () => {
         quality: AnswerQuality.Perfect,
         wasTimed: false,
       },
-      {
-        cardId: "card1",
-        easeFactor: 2.6,
-        intervalDays: 1,
-        repetitions: 1,
-        nextReviewAt: new Date().toISOString(),
-      },
+      makeSchedule(),
     );
 
     const attempts = statsRepo.getAttempts("card1");
@@ -145,16 +151,381 @@ describe("StatsRepository", () => {
         quality: AnswerQuality.Correct,
         wasTimed: false,
       },
-      {
-        cardId: "card1",
-        easeFactor: 2.5,
-        intervalDays: 1,
-        repetitions: 1,
-        nextReviewAt: new Date().toISOString(),
-      },
+      makeSchedule(),
     );
 
     expect(statsRepo.getTotalReviewed()).toBe(1);
     expect(statsRepo.getTotalAttempts()).toBe(1);
+  });
+
+  describe("FSRS field storage and retrieval", () => {
+    it("stores and retrieves all FSRS fields", () => {
+      const schedule = makeSchedule({
+        cardId: "card1",
+        difficulty: 7.2,
+        stability: 14.5,
+        reps: 5,
+        lapses: 2,
+        state: "review",
+        due: "2026-03-15T10:00:00.000Z",
+        lastReview: "2026-02-28T10:00:00.000Z",
+      });
+
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 3.0,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        schedule,
+      );
+
+      const retrieved = statsRepo.getSchedule("card1");
+      expect(retrieved).toBeDefined();
+      expect(retrieved!.cardId).toBe("card1");
+      expect(retrieved!.difficulty).toBe(7.2);
+      expect(retrieved!.stability).toBe(14.5);
+      expect(retrieved!.reps).toBe(5);
+      expect(retrieved!.lapses).toBe(2);
+      expect(retrieved!.state).toBe("review");
+      expect(retrieved!.due).toBe("2026-03-15T10:00:00.000Z");
+      expect(retrieved!.lastReview).toBe("2026-02-28T10:00:00.000Z");
+    });
+
+    it("updates FSRS fields on subsequent attempts", () => {
+      // First attempt: learning
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ state: "learning", stability: 1.0, difficulty: 5.0 }),
+      );
+
+      let retrieved = statsRepo.getSchedule("card1");
+      expect(retrieved!.state).toBe("learning");
+
+      // Second attempt: promoted to review
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 1.5,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ state: "review", stability: 10.0, difficulty: 4.5, reps: 2 }),
+      );
+
+      retrieved = statsRepo.getSchedule("card1");
+      expect(retrieved!.state).toBe("review");
+      expect(retrieved!.stability).toBe(10.0);
+      expect(retrieved!.difficulty).toBe(4.5);
+      expect(retrieved!.reps).toBe(2);
+    });
+
+    it("tracks lapses on incorrect answers", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 5.0,
+          quality: AnswerQuality.Wrong,
+          wasTimed: false,
+        },
+        makeSchedule({ state: "relearning", lapses: 1, stability: 0.5 }),
+      );
+
+      const retrieved = statsRepo.getSchedule("card1");
+      expect(retrieved!.state).toBe("relearning");
+      expect(retrieved!.lapses).toBe(1);
+      expect(retrieved!.stability).toBe(0.5);
+    });
+
+    it("returns undefined for card with no stats", () => {
+      const schedule = statsRepo.getSchedule("nonexistent-card");
+      expect(schedule).toBeUndefined();
+    });
+  });
+
+  describe("getCardsByState", () => {
+    beforeEach(() => {
+      // Insert additional cards
+      cardRepo.insertCards([
+        { ...testCard, id: "card2" },
+        { ...testCard, id: "card3" },
+        { ...testCard, id: "card4" },
+      ]);
+    });
+
+    it("returns new cards (no stats row)", () => {
+      // Cards with no stats should be treated as 'new'
+      const newCards = statsRepo.getCardsByState("deck1", "new");
+      expect(newCards).toContain("card1");
+      expect(newCards).toContain("card2");
+      expect(newCards).toContain("card3");
+      expect(newCards).toContain("card4");
+      expect(newCards).toHaveLength(4);
+    });
+
+    it("returns new cards (with stats row in 'new' state)", () => {
+      statsRepo.ensureStatsExist("card1");
+      const newCards = statsRepo.getCardsByState("deck1", "new");
+      expect(newCards).toContain("card1");
+    });
+
+    it("returns learning cards", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+
+      const learningCards = statsRepo.getCardsByState("deck1", "learning");
+      expect(learningCards).toContain("card1");
+      expect(learningCards).toHaveLength(1);
+    });
+
+    it("returns review cards", () => {
+      statsRepo.recordAttempt(
+        "card2",
+        {
+          cardId: "card2",
+          timestamp: Date.now(),
+          responseTime: 1.5,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card2", state: "review" }),
+      );
+
+      const reviewCards = statsRepo.getCardsByState("deck1", "review");
+      expect(reviewCards).toContain("card2");
+      expect(reviewCards).toHaveLength(1);
+    });
+
+    it("returns relearning cards", () => {
+      statsRepo.recordAttempt(
+        "card3",
+        {
+          cardId: "card3",
+          timestamp: Date.now(),
+          responseTime: 5.0,
+          quality: AnswerQuality.Wrong,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card3", state: "relearning", lapses: 1 }),
+      );
+
+      const relearnCards = statsRepo.getCardsByState("deck1", "relearning");
+      expect(relearnCards).toContain("card3");
+      expect(relearnCards).toHaveLength(1);
+    });
+
+    it("does not return cards from other decks", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Other Deck", description: "", createdAt: new Date().toISOString() });
+      cardRepo.insertCard({ ...testCard, id: "other-card", deckId: "deck2" });
+
+      statsRepo.recordAttempt(
+        "other-card",
+        {
+          cardId: "other-card",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "other-card", state: "learning" }),
+      );
+
+      const learningCards = statsRepo.getCardsByState("deck1", "learning");
+      expect(learningCards).not.toContain("other-card");
+    });
+  });
+
+  describe("getDueCards", () => {
+    beforeEach(() => {
+      cardRepo.insertCards([
+        { ...testCard, id: "card2" },
+        { ...testCard, id: "card3" },
+      ]);
+    });
+
+    it("returns new cards (no stats) as due", () => {
+      const due = statsRepo.getDueCards("deck1");
+      expect(due).toContain("card1");
+      expect(due).toContain("card2");
+      expect(due).toContain("card3");
+    });
+
+    it("returns cards with past due dates", () => {
+      const pastDue = new Date(Date.now() - 86400000).toISOString();
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "review", due: pastDue }),
+      );
+
+      const due = statsRepo.getDueCards("deck1");
+      expect(due).toContain("card1");
+    });
+
+    it("excludes cards with future due dates (non-new)", () => {
+      const futureDue = new Date(Date.now() + 86400000 * 7).toISOString();
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "review", due: futureDue }),
+      );
+
+      const due = statsRepo.getDueCards("deck1");
+      expect(due).not.toContain("card1");
+      // card2 and card3 still due (new)
+      expect(due).toContain("card2");
+      expect(due).toContain("card3");
+    });
+
+    it("respects limit parameter", () => {
+      const due = statsRepo.getDueCards("deck1", 2);
+      expect(due).toHaveLength(2);
+    });
+
+    it("works without deckId (all decks)", () => {
+      const due = statsRepo.getDueCards();
+      expect(due.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("includes new cards with stats row in 'new' state", () => {
+      statsRepo.ensureStatsExist("card1");
+      const due = statsRepo.getDueCards("deck1");
+      expect(due).toContain("card1");
+    });
+  });
+
+  describe("getDeckMasteryStats", () => {
+    beforeEach(() => {
+      cardRepo.insertCards([
+        { ...testCard, id: "card2" },
+        { ...testCard, id: "card3" },
+        { ...testCard, id: "card4" },
+        { ...testCard, id: "card5" },
+      ]);
+    });
+
+    it("returns all cards as new when no reviews done", () => {
+      const stats = statsRepo.getDeckMasteryStats("deck1");
+      expect(stats.total).toBe(5);
+      expect(stats.newCount).toBe(5);
+      expect(stats.learningCount).toBe(0);
+      expect(stats.reviewCount).toBe(0);
+      expect(stats.relearnCount).toBe(0);
+    });
+
+    it("counts cards in each state correctly", () => {
+      // card1 -> learning
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+
+      // card2 -> review
+      statsRepo.recordAttempt(
+        "card2",
+        {
+          cardId: "card2",
+          timestamp: Date.now(),
+          responseTime: 1.5,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card2", state: "review" }),
+      );
+
+      // card3 -> relearning
+      statsRepo.recordAttempt(
+        "card3",
+        {
+          cardId: "card3",
+          timestamp: Date.now(),
+          responseTime: 5.0,
+          quality: AnswerQuality.Wrong,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card3", state: "relearning", lapses: 1 }),
+      );
+
+      // card4, card5 -> still new (no stats)
+
+      const stats = statsRepo.getDeckMasteryStats("deck1");
+      expect(stats.total).toBe(5);
+      expect(stats.newCount).toBe(2);
+      expect(stats.learningCount).toBe(1);
+      expect(stats.reviewCount).toBe(1);
+      expect(stats.relearnCount).toBe(1);
+    });
+
+    it("returns zeros for empty deck", () => {
+      cardRepo.createDeck({ id: "empty", name: "Empty", description: "", createdAt: new Date().toISOString() });
+      const stats = statsRepo.getDeckMasteryStats("empty");
+      expect(stats.total).toBe(0);
+      expect(stats.newCount).toBe(0);
+      expect(stats.learningCount).toBe(0);
+      expect(stats.reviewCount).toBe(0);
+      expect(stats.relearnCount).toBe(0);
+    });
+
+    it("does not count cards from other decks", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck2", description: "", createdAt: new Date().toISOString() });
+      cardRepo.insertCard({ ...testCard, id: "other-card", deckId: "deck2" });
+      statsRepo.recordAttempt(
+        "other-card",
+        {
+          cardId: "other-card",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "other-card", state: "review" }),
+      );
+
+      const stats = statsRepo.getDeckMasteryStats("deck1");
+      expect(stats.total).toBe(5);
+      expect(stats.reviewCount).toBe(0);
+    });
   });
 });
