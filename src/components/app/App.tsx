@@ -390,10 +390,8 @@ export default function App() {
           ? AnswerQuality.Correct
           : AnswerQuality.Wrong;
         for (const card of combatCards.slice(0, result.cardsReviewed)) {
-          let schedule = statsRepo.getSchedule(card.id);
-          if (!schedule) {
-            schedule = createInitialSchedule(card.id);
-          }
+          const existing = statsRepo.getSchedule(card.id);
+          const schedule: ScheduleData = existing ?? createInitialSchedule(card.id);
           const updatedSchedule = updateSchedule(schedule, quality);
           statsRepo.recordAttempt(
             card.id,
@@ -452,10 +450,8 @@ export default function App() {
 
         // Update each card's FSRS schedule
         for (const result of results) {
-          let schedule = statsRepo.getSchedule(result.cardId);
-          if (!schedule) {
-            schedule = createInitialSchedule(result.cardId);
-          }
+          const existing = statsRepo.getSchedule(result.cardId);
+          const schedule: ScheduleData = existing ?? createInitialSchedule(result.cardId);
           const updatedSchedule = updateSchedule(schedule, result.quality);
           statsRepo.recordAttempt(
             result.cardId,
