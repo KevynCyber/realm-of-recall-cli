@@ -37,6 +37,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     totalCorrect: 170,
     combatWins: 30,
     combatLosses: 10,
+    wisdomXp: 0,
     createdAt: "2026-02-01",
     ...overrides,
   };

@@ -4,6 +4,7 @@ import { useGameTheme } from "../app/ThemeProvider.js";
 import type { Player } from "../../types/player.js";
 import { xpToNextLevel } from "../../core/progression/XPCalculator.js";
 import { getStreakBonus, getStreakTitle } from "../../core/progression/StreakTracker.js";
+import type { TrendResult } from "../../core/analytics/MarginalGains.js";
 
 interface DeckStat {
   name: string;
@@ -24,6 +25,11 @@ interface Props {
   deckStats: DeckStat[];
   fsrsStats: FsrsStats;
   onBack: () => void;
+  // Ultra-learner props (all optional for backward compat)
+  accuracyTrend?: TrendResult;
+  speedTrend?: TrendResult;
+  consistencyGrid?: string;
+  wisdomXp?: number;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -39,7 +45,16 @@ function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; 
   );
 }
 
-export function StatsScreen({ player, deckStats, fsrsStats, onBack }: Props) {
+export function StatsScreen({
+  player,
+  deckStats,
+  fsrsStats,
+  onBack,
+  accuracyTrend,
+  speedTrend,
+  consistencyGrid,
+  wisdomXp,
+}: Props) {
   const theme = useGameTheme();
 
   useInput((input, key) => {
@@ -57,6 +72,9 @@ export function StatsScreen({ player, deckStats, fsrsStats, onBack }: Props) {
       : 0;
   const streakBonus = getStreakBonus(player.streakDays);
   const streakTitle = getStreakTitle(player.streakDays);
+
+  const trendArrow = (trend: string) =>
+    trend === "improving" ? "\u2191" : trend === "declining" ? "\u2193" : "\u2192";
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -136,6 +154,47 @@ export function StatsScreen({ player, deckStats, fsrsStats, onBack }: Props) {
           ))
         )}
       </Box>
+
+      {/* Section 6 — Progress Trends (Ultra-Learner) */}
+      {accuracyTrend && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.xp}>
+            Progress Trends
+          </Text>
+          <Text>
+            Accuracy: {accuracyTrend.sparkline} {trendArrow(accuracyTrend.trend)}{" "}
+            {Math.abs(accuracyTrend.percentChange).toFixed(1)}%
+          </Text>
+          {speedTrend && (
+            <Text>
+              Speed:    {speedTrend.sparkline} {trendArrow(speedTrend.trend)}{" "}
+              {Math.abs(speedTrend.percentChange).toFixed(1)}%
+            </Text>
+          )}
+        </Box>
+      )}
+
+      {/* Section 7 — Consistency (Ultra-Learner) */}
+      {consistencyGrid && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.streakFire}>
+            Consistency
+          </Text>
+          <Text>{consistencyGrid}</Text>
+        </Box>
+      )}
+
+      {/* Section 8 — Wisdom (Ultra-Learner) */}
+      {wisdomXp !== undefined && wisdomXp > 0 && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color="magenta">
+            Wisdom
+          </Text>
+          <Text>
+            Wisdom XP: <Text color="magenta">{wisdomXp}</Text>
+          </Text>
+        </Box>
+      )}
 
       {/* Navigation hint */}
       <Box paddingX={1}>

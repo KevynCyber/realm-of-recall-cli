@@ -11,13 +11,16 @@ import { MapScreen } from "../screens/MapScreen.js";
 import { StatsScreen } from "../screens/StatsScreen.js";
 import { DeckScreen } from "../screens/DeckScreen.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
+import type { ReviewResult } from "../review/ReviewScreen.js";
 import { ReviewSummary } from "../review/ReviewSummary.js";
+import { ReflectionScreen } from "../review/ReflectionScreen.js";
 import { getDatabase } from "../../data/database.js";
 import { PlayerRepository } from "../../data/repositories/PlayerRepository.js";
 import { CardRepository } from "../../data/repositories/CardRepository.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
 import { EquipmentRepository } from "../../data/repositories/EquipmentRepository.js";
 import { ZoneRepository } from "../../data/repositories/ZoneRepository.js";
+import { ReflectionRepository } from "../../data/repositories/ReflectionRepository.js";
 import { createNewPlayer } from "../../core/player/PlayerStats.js";
 import { generateEnemy } from "../../core/combat/EnemyGenerator.js";
 import {
@@ -30,6 +33,15 @@ import {
   getStreakBonus,
   isStreakAtRisk,
 } from "../../core/progression/StreakTracker.js";
+import {
+  selectPrompt,
+  shouldShowJournal,
+  generateCPJReframe,
+  shouldShowCPJ,
+} from "../../core/reflection/ReflectionEngine.js";
+import {
+  calculateTrend,
+} from "../../core/analytics/MarginalGains.js";
 import type {
   Player,
   Equipment,
@@ -41,6 +53,7 @@ import type {
 import { AnswerQuality, PlayerClass } from "../../types/index.js";
 import type { CombatResult } from "../../types/combat.js";
 import type { Enemy } from "../../types/combat.js";
+import type { TrendResult } from "../../core/analytics/MarginalGains.js";
 
 export type Screen =
   | "title"
@@ -48,6 +61,7 @@ export type Screen =
   | "combat"
   | "review"
   | "review_summary"
+  | "reflection"
   | "inventory"
   | "map"
   | "stats"
@@ -106,12 +120,30 @@ export default function App() {
   const [deckData, setDeckData] = useState<
     Array<{ deck: Deck; cardCount: number; dueCount: number }>
   >([]);
-  const [reviewResults, setReviewResults] = useState<
-    Array<{ cardId: string; quality: AnswerQuality; responseTime: number }>
-  >([]);
+  const [reviewResults, setReviewResults] = useState<ReviewResult[]>([]);
   const [reviewXp, setReviewXp] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
+
+  // Reflection flow state
+  const [reflectionAccuracy, setReflectionAccuracy] = useState(0);
+  const [reflectionCardsReviewed, setReflectionCardsReviewed] = useState(0);
+  const [reflectionCpjMessages, setReflectionCpjMessages] = useState<
+    string[] | undefined
+  >(undefined);
+  const [reflectionShowJournal, setReflectionShowJournal] = useState(false);
+  const [reflectionPrompt, setReflectionPrompt] = useState("");
+  const [reflectionDeckId, setReflectionDeckId] = useState<string | undefined>(
+    undefined,
+  );
+
+  // Marginal gains data for stats screen
+  const [accuracyTrend, setAccuracyTrend] = useState<TrendResult | undefined>(
+    undefined,
+  );
+  const [speedTrend, setSpeedTrend] = useState<TrendResult | undefined>(
+    undefined,
+  );
 
   const refreshCardsDue = useCallback(() => {
     try {
@@ -313,6 +345,26 @@ export default function App() {
             }
             setDeckStats(ds);
             setFsrsStats(agg);
+
+            // Load marginal gains data
+            try {
+              const accuracyHistory = statsRepo.getAccuracyHistory(14);
+              const speedHistory = statsRepo.getResponseTimeHistory(14);
+              if (accuracyHistory.length > 0) {
+                setAccuracyTrend(calculateTrend(accuracyHistory, true));
+              } else {
+                setAccuracyTrend(undefined);
+              }
+              if (speedHistory.length > 0) {
+                setSpeedTrend(calculateTrend(speedHistory, false));
+              } else {
+                setSpeedTrend(undefined);
+              }
+            } catch {
+              setAccuracyTrend(undefined);
+              setSpeedTrend(undefined);
+            }
+
             setScreen("stats");
           } catch {
             // ignore
@@ -417,13 +469,7 @@ export default function App() {
   );
 
   const handleReviewComplete = useCallback(
-    (
-      results: Array<{
-        cardId: string;
-        quality: AnswerQuality;
-        responseTime: number;
-      }>,
-    ) => {
+    (results: ReviewResult[]) => {
       if (!player) return;
       try {
         const db = getDatabase();
@@ -451,8 +497,13 @@ export default function App() {
         // Update each card's FSRS schedule
         for (const result of results) {
           const existing = statsRepo.getSchedule(result.cardId);
-          const schedule: ScheduleData = existing ?? createInitialSchedule(result.cardId);
-          const updatedSchedule = updateSchedule(schedule, result.quality);
+          const schedule: ScheduleData =
+            existing ?? createInitialSchedule(result.cardId);
+          const updatedSchedule = updateSchedule(
+            schedule,
+            result.quality,
+            result.confidence,
+          );
           statsRepo.recordAttempt(
             result.cardId,
             {
@@ -461,6 +512,9 @@ export default function App() {
               responseTime: result.responseTime,
               quality: result.quality,
               wasTimed: false,
+              confidence: result.confidence,
+              retrievalMode: result.retrievalMode,
+              responseText: result.responseText,
             },
             updatedSchedule,
           );
@@ -479,6 +533,20 @@ export default function App() {
         setReviewXp(xpGained);
         setLeveledUp(updated.level > prevLevel);
         setNewLevel(updated.level);
+
+        // Calculate reflection data
+        const reviewAccuracy =
+          results.length > 0 ? correctCount / results.length : 0;
+        const cpjMessages = shouldShowCPJ(reviewAccuracy)
+          ? generateCPJReframe(reviewAccuracy, [])
+          : undefined;
+        setReflectionAccuracy(reviewAccuracy);
+        setReflectionCardsReviewed(results.length);
+        setReflectionCpjMessages(cpjMessages);
+        setReflectionShowJournal(shouldShowJournal());
+        setReflectionPrompt(selectPrompt(null));
+        setReflectionDeckId(undefined);
+
         refreshCardsDue();
         setScreen("review_summary");
       } catch (err: any) {
@@ -487,6 +555,55 @@ export default function App() {
       }
     },
     [player, refreshCardsDue],
+  );
+
+  const handleReflectionComplete = useCallback(
+    (result: {
+      difficultyRating: 1 | 2 | 3;
+      journalEntry?: string;
+      wisdomXp: number;
+    }) => {
+      if (!player) return;
+      try {
+        const db = getDatabase();
+        const reflectionRepo = new ReflectionRepository(db);
+        const playerRepo = new PlayerRepository(db);
+
+        // Save reflection
+        reflectionRepo.saveReflection({
+          id: `ref-${Date.now()}`,
+          sessionType: "review",
+          difficultyRating: result.difficultyRating,
+          journalEntry: result.journalEntry,
+          promptUsed: reflectionPrompt,
+          accuracy: reflectionAccuracy,
+          cardsReviewed: reflectionCardsReviewed,
+          deckId: reflectionDeckId,
+        });
+
+        // Add wisdom XP to player
+        const updated = {
+          ...player,
+          wisdomXp: player.wisdomXp + result.wisdomXp,
+        };
+        playerRepo.updatePlayer(updated);
+        setPlayer(updated);
+
+        refreshCardsDue();
+        setScreen("hub");
+      } catch (err: any) {
+        console.error("Error saving reflection:", err.message);
+        setScreen("hub");
+      }
+    },
+    [
+      player,
+      reflectionAccuracy,
+      reflectionCardsReviewed,
+      reflectionPrompt,
+      reflectionDeckId,
+      refreshCardsDue,
+    ],
   );
 
   const handleEquip = useCallback((inventoryId: number) => {
@@ -570,7 +687,8 @@ export default function App() {
     if (
       screen === "title" ||
       screen === "combat" ||
-      screen === "review"
+      screen === "review" ||
+      screen === "reflection"
     )
       return;
     if (input === "q") {
@@ -578,7 +696,7 @@ export default function App() {
       return;
     }
     if (key.return && screen === "review_summary") {
-      setScreen("hub");
+      setScreen("reflection");
       return;
     }
     if (key.escape && screen !== "hub") {
@@ -639,6 +757,17 @@ export default function App() {
             </Box>
           </Box>
         );
+      case "reflection":
+        return (
+          <ReflectionScreen
+            accuracy={reflectionAccuracy}
+            cardsReviewed={reflectionCardsReviewed}
+            cpjMessages={reflectionCpjMessages}
+            showJournal={reflectionShowJournal}
+            reflectionPrompt={reflectionPrompt}
+            onComplete={handleReflectionComplete}
+          />
+        );
       case "inventory":
         return (
           <InventoryScreen
@@ -672,6 +801,9 @@ export default function App() {
             deckStats={deckStats}
             fsrsStats={fsrsStats}
             onBack={() => setScreen("hub")}
+            accuracyTrend={accuracyTrend}
+            speedTrend={speedTrend}
+            wisdomXp={player.wisdomXp}
           />
         ) : null;
       default:

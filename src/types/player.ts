@@ -66,5 +66,6 @@ export interface Player {
   totalCorrect: number;
   combatWins: number;
   combatLosses: number;
+  wisdomXp: number;
   createdAt: string;
 }

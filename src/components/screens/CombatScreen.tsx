@@ -21,8 +21,15 @@ import { LootDrop } from "../combat/LootDrop.js";
 import { DamageNumber } from "../combat/DamageNumber.js";
 import { FlashcardFace } from "../review/FlashcardFace.js";
 import { useGameTheme } from "../app/ThemeProvider.js";
+import { ReflectionScreen } from "../review/ReflectionScreen.js";
+import {
+  selectPrompt,
+  shouldShowJournal,
+  generateCPJReframe,
+  shouldShowCPJ,
+} from "../../core/reflection/ReflectionEngine.js";
 
-type Phase = "intro" | "card" | "resolve" | "result";
+type Phase = "intro" | "card" | "resolve" | "result" | "reflection";
 
 interface Props {
   cards: Card[];
@@ -61,6 +68,7 @@ export function CombatScreen({
   );
   const [victory, setVictory] = useState(false);
   const [lootDismissed, setLootDismissed] = useState(false);
+  const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
 
   const currentCard = cards[combat.currentCardIndex] ?? null;
   const totalTime = 30; // seconds per card
@@ -153,7 +161,7 @@ export function CombatScreen({
     [currentCard, cardStart, combat, stats],
   );
 
-  // -- Handle Enter in result phase --
+  // -- Handle Enter in result phase: transition to reflection --
   useInput(
     (_input, key) => {
       if (phase === "result" && key.return) {
@@ -170,10 +178,21 @@ export function CombatScreen({
           perfectCount: combat.stats.perfectCount,
           correctCount: combat.stats.correctCount,
         };
-        onComplete(result);
+        setCombatResult(result);
+        setPhase("reflection");
       }
     },
     { isActive: phase === "result" },
+  );
+
+  // -- Handle reflection completion --
+  const handleReflectionComplete = useCallback(
+    (_result: { difficultyRating: 1 | 2 | 3; journalEntry?: string; wisdomXp: number }) => {
+      if (combatResult) {
+        onComplete(combatResult);
+      }
+    },
+    [combatResult, onComplete],
   );
 
   // ─── Render ───────────────────────────────────────────
@@ -189,6 +208,33 @@ export function CombatScreen({
           A {enemy.name} appears!
         </Text>
       </Box>
+    );
+  }
+
+  // Reflection phase
+  if (phase === "reflection") {
+    const totalAnswers =
+      combat.stats.perfectCount +
+      combat.stats.correctCount +
+      combat.stats.partialCount +
+      combat.stats.wrongCount;
+    const combatAccuracy =
+      totalAnswers > 0
+        ? (combat.stats.perfectCount + combat.stats.correctCount) / totalAnswers
+        : 0;
+    const cpjMessages = shouldShowCPJ(combatAccuracy)
+      ? generateCPJReframe(combatAccuracy, [])
+      : undefined;
+
+    return (
+      <ReflectionScreen
+        accuracy={combatAccuracy}
+        cardsReviewed={combat.currentCardIndex}
+        cpjMessages={cpjMessages}
+        showJournal={shouldShowJournal()}
+        reflectionPrompt={selectPrompt(null)}
+        onComplete={handleReflectionComplete}
+      />
     );
   }
 

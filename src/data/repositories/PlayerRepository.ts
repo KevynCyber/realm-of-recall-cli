@@ -29,6 +29,7 @@ export class PlayerRepository {
       totalCorrect: row.total_correct,
       combatWins: row.combat_wins,
       combatLosses: row.combat_losses,
+      wisdomXp: row.wisdom_xp ?? 0,
       createdAt: row.created_at,
     };
   }
@@ -38,8 +39,8 @@ export class PlayerRepository {
       .prepare(
         `INSERT INTO player (id, name, class, level, xp, hp, max_hp, attack, defense, gold,
           streak_days, longest_streak, last_review_date, shield_count,
-          total_reviews, total_correct, combat_wins, combat_losses, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         player.id,
@@ -60,6 +61,7 @@ export class PlayerRepository {
         player.totalCorrect,
         player.combatWins,
         player.combatLosses,
+        player.wisdomXp,
         player.createdAt,
       );
   }
@@ -71,7 +73,7 @@ export class PlayerRepository {
           name = ?, class = ?, level = ?, xp = ?, hp = ?, max_hp = ?,
           attack = ?, defense = ?, gold = ?, streak_days = ?, longest_streak = ?,
           last_review_date = ?, shield_count = ?, total_reviews = ?, total_correct = ?,
-          combat_wins = ?, combat_losses = ?, created_at = ?
+          combat_wins = ?, combat_losses = ?, wisdom_xp = ?, created_at = ?
          WHERE id = 1`,
       )
       .run(
@@ -92,6 +94,7 @@ export class PlayerRepository {
         player.totalCorrect,
         player.combatWins,
         player.combatLosses,
+        player.wisdomXp,
         player.createdAt,
       );
   }

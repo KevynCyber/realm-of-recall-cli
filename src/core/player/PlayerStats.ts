@@ -67,6 +67,7 @@ export function createNewPlayer(name: string, playerClass: PlayerClass): Player 
     totalCorrect: 0,
     combatWins: 0,
     combatLosses: 0,
+    wisdomXp: 0,
     createdAt: new Date().toISOString(),
   };
 }
