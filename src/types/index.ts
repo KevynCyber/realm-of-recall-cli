@@ -33,6 +33,7 @@ export interface Deck {
   name: string;
   description: string;
   createdAt: string;
+  equipped: boolean;
 }
 
 export interface RecallAttempt {

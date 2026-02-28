@@ -31,6 +31,7 @@ export function importCsv(filePath: string): { deck: Deck; cards: Card[] } {
     name: deckName,
     description: `Imported from ${path.basename(filePath)}`,
     createdAt: new Date().toISOString(),
+    equipped: true,
   };
 
   const cards: Card[] = dataLines.map((line) => {

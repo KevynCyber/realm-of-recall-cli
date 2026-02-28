@@ -14,6 +14,7 @@ const testDeck1: Deck = {
   name: "Math",
   description: "Math deck",
   createdAt: new Date().toISOString(),
+  equipped: true,
 };
 
 const testDeck2: Deck = {
@@ -21,6 +22,7 @@ const testDeck2: Deck = {
   name: "Science",
   description: "Science deck",
   createdAt: new Date().toISOString(),
+  equipped: true,
 };
 
 const zone1: Zone = {

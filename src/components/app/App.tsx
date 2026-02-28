@@ -9,6 +9,7 @@ import { CombatScreen } from "../screens/CombatScreen.js";
 import { InventoryScreen } from "../screens/InventoryScreen.js";
 import { MapScreen } from "../screens/MapScreen.js";
 import { StatsScreen } from "../screens/StatsScreen.js";
+import { DeckScreen } from "../screens/DeckScreen.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
 import { ReviewSummary } from "../review/ReviewSummary.js";
 import { getDatabase } from "../../data/database.js";
@@ -33,6 +34,7 @@ import type {
   Player,
   Equipment,
   Card,
+  Deck,
   Zone,
   ScheduleData,
 } from "../../types/index.js";
@@ -48,7 +50,8 @@ export type Screen =
   | "review_summary"
   | "inventory"
   | "map"
-  | "stats";
+  | "stats"
+  | "decks";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -100,6 +103,9 @@ export default function App() {
     reviewCount: 0,
     relearnCount: 0,
   });
+  const [deckData, setDeckData] = useState<
+    Array<{ deck: Deck; cardCount: number; dueCount: number }>
+  >([]);
   const [reviewResults, setReviewResults] = useState<
     Array<{ cardId: string; quality: AnswerQuality; responseTime: number }>
   >([]);
@@ -110,8 +116,10 @@ export default function App() {
   const refreshCardsDue = useCallback(() => {
     try {
       const db = getDatabase();
+      const cardRepo = new CardRepository(db);
       const statsRepo = new StatsRepository(db);
-      const dueIds = statsRepo.getDueCards(undefined, 9999);
+      const equippedIds = cardRepo.getEquippedDeckIds();
+      const dueIds = statsRepo.getDueCards(equippedIds, 9999);
       setCardsDue(dueIds.length);
     } catch {
       // ignore
@@ -138,8 +146,10 @@ export default function App() {
       if (p) {
         setPlayer(p);
         setScreen("hub");
+        const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
-        const dueIds = statsRepo.getDueCards(undefined, 9999);
+        const equippedIds = cardRepo.getEquippedDeckIds();
+        const dueIds = statsRepo.getDueCards(equippedIds, 9999);
         setCardsDue(dueIds.length);
       }
     } catch {
@@ -173,7 +183,8 @@ export default function App() {
         const statsRepo = new StatsRepository(db);
         const equipRepo = new EquipmentRepository(db);
 
-        const dueIds = statsRepo.getDueCards(deckId, 10);
+        const deckFilter = deckId ?? cardRepo.getEquippedDeckIds();
+        const dueIds = statsRepo.getDueCards(deckFilter, 10);
         const cards = dueIds
           .map((id) => cardRepo.getCard(id))
           .filter((c): c is Card => c !== undefined);
@@ -206,7 +217,8 @@ export default function App() {
             const db = getDatabase();
             const cardRepo = new CardRepository(db);
             const statsRepo = new StatsRepository(db);
-            const dueIds = statsRepo.getDueCards(undefined, 20);
+            const equippedIds = cardRepo.getEquippedDeckIds();
+            const dueIds = statsRepo.getDueCards(equippedIds, 20);
             const cards = dueIds
               .map((id) => cardRepo.getCard(id))
               .filter((c): c is Card => c !== undefined);
@@ -302,6 +314,24 @@ export default function App() {
             setDeckStats(ds);
             setFsrsStats(agg);
             setScreen("stats");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "decks": {
+          try {
+            const db = getDatabase();
+            const cardRepo = new CardRepository(db);
+            const statsRepo = new StatsRepository(db);
+            const allDecks = cardRepo.getAllDecks();
+            const infos = allDecks.map((deck) => ({
+              deck,
+              cardCount: cardRepo.getCardCount(deck.id),
+              dueCount: statsRepo.getDueCardIds(deck.id).length,
+            }));
+            setDeckData(infos);
+            setScreen("decks");
           } catch {
             // ignore
           }
@@ -499,6 +529,28 @@ export default function App() {
     }
   }, []);
 
+  const handleToggleDeck = useCallback(
+    (deckId: string) => {
+      try {
+        const db = getDatabase();
+        const cardRepo = new CardRepository(db);
+        const statsRepo = new StatsRepository(db);
+        cardRepo.toggleDeckEquipped(deckId);
+        const allDecks = cardRepo.getAllDecks();
+        const infos = allDecks.map((deck) => ({
+          deck,
+          cardCount: cardRepo.getCardCount(deck.id),
+          dueCount: statsRepo.getDueCardIds(deck.id).length,
+        }));
+        setDeckData(infos);
+        refreshCardsDue();
+      } catch {
+        // ignore
+      }
+    },
+    [refreshCardsDue],
+  );
+
   const handleSelectZone = useCallback(
     (zoneId: string) => {
       if (!player) return;
@@ -606,6 +658,14 @@ export default function App() {
           <MapScreen
             zones={zoneData}
             onSelectZone={handleSelectZone}
+            onBack={() => setScreen("hub")}
+          />
+        );
+      case "decks":
+        return (
+          <DeckScreen
+            decks={deckData}
+            onToggle={handleToggleDeck}
             onBack={() => setScreen("hub")}
           />
         );

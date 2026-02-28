@@ -14,6 +14,7 @@ const testDeck: Deck = {
   name: "Test Deck",
   description: "For testing",
   createdAt: new Date().toISOString(),
+  equipped: true,
 };
 
 const testCard: Card = {
@@ -55,6 +56,7 @@ describe("CardRepository", () => {
   it("lists all decks", () => {
     const decks = cardRepo.getAllDecks();
     expect(decks).toHaveLength(1);
+    expect(decks[0].equipped).toBe(true);
   });
 
   it("inserts and retrieves a card", () => {
@@ -87,6 +89,37 @@ describe("CardRepository", () => {
     cardRepo.deleteDeck("deck1");
     expect(cardRepo.getDeck("deck1")).toBeUndefined();
     expect(cardRepo.getCard("card1")).toBeUndefined();
+  });
+
+  describe("equipped deck management", () => {
+    it("returns equipped deck IDs", () => {
+      const ids = cardRepo.getEquippedDeckIds();
+      expect(ids).toContain("deck1");
+    });
+
+    it("toggles deck equipped off", () => {
+      cardRepo.toggleDeckEquipped("deck1");
+      const deck = cardRepo.getDeck("deck1");
+      expect(deck?.equipped).toBe(false);
+      expect(cardRepo.getEquippedDeckIds()).toHaveLength(0);
+    });
+
+    it("toggles deck equipped back on", () => {
+      cardRepo.toggleDeckEquipped("deck1");
+      cardRepo.toggleDeckEquipped("deck1");
+      const deck = cardRepo.getDeck("deck1");
+      expect(deck?.equipped).toBe(true);
+    });
+
+    it("filters equipped deck IDs with multiple decks", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.createDeck({ id: "deck3", name: "Deck 3", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.toggleDeckEquipped("deck2"); // unequip deck2
+      const ids = cardRepo.getEquippedDeckIds();
+      expect(ids).toContain("deck1");
+      expect(ids).not.toContain("deck2");
+      expect(ids).toContain("deck3");
+    });
   });
 });
 
@@ -338,7 +371,7 @@ describe("StatsRepository", () => {
     });
 
     it("does not return cards from other decks", () => {
-      cardRepo.createDeck({ id: "deck2", name: "Other Deck", description: "", createdAt: new Date().toISOString() });
+      cardRepo.createDeck({ id: "deck2", name: "Other Deck", description: "", createdAt: new Date().toISOString(), equipped: true });
       cardRepo.insertCard({ ...testCard, id: "other-card", deckId: "deck2" });
 
       statsRepo.recordAttempt(
@@ -427,6 +460,48 @@ describe("StatsRepository", () => {
       const due = statsRepo.getDueCards("deck1");
       expect(due).toContain("card1");
     });
+
+    it("filters by multiple deck IDs (string[])", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.insertCards([
+        { ...testCard, id: "d2c1", deckId: "deck2" },
+        { ...testCard, id: "d2c2", deckId: "deck2" },
+      ]);
+
+      // Should include cards from both decks
+      const due = statsRepo.getDueCards(["deck1", "deck2"]);
+      expect(due).toContain("card1");
+      expect(due).toContain("d2c1");
+      expect(due).toContain("d2c2");
+    });
+
+    it("excludes decks not in the array", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.insertCard({ ...testCard, id: "d2c1", deckId: "deck2" });
+
+      // Only request deck1 cards
+      const due = statsRepo.getDueCards(["deck1"]);
+      expect(due).toContain("card1");
+      expect(due).not.toContain("d2c1");
+    });
+
+    it("returns empty array for empty deck ID array", () => {
+      const due = statsRepo.getDueCards([]);
+      expect(due).toHaveLength(0);
+    });
+
+    it("getDueCardIds filters by multiple deck IDs", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.insertCard({ ...testCard, id: "d2c1", deckId: "deck2" });
+
+      const due = statsRepo.getDueCardIds(["deck1", "deck2"]);
+      expect(due).toContain("card1");
+      expect(due).toContain("d2c1");
+
+      const dueOnlyDeck1 = statsRepo.getDueCardIds(["deck1"]);
+      expect(dueOnlyDeck1).toContain("card1");
+      expect(dueOnlyDeck1).not.toContain("d2c1");
+    });
   });
 
   describe("getDeckMasteryStats", () => {
@@ -499,7 +574,7 @@ describe("StatsRepository", () => {
     });
 
     it("returns zeros for empty deck", () => {
-      cardRepo.createDeck({ id: "empty", name: "Empty", description: "", createdAt: new Date().toISOString() });
+      cardRepo.createDeck({ id: "empty", name: "Empty", description: "", createdAt: new Date().toISOString(), equipped: true });
       const stats = statsRepo.getDeckMasteryStats("empty");
       expect(stats.total).toBe(0);
       expect(stats.newCount).toBe(0);
@@ -509,7 +584,7 @@ describe("StatsRepository", () => {
     });
 
     it("does not count cards from other decks", () => {
-      cardRepo.createDeck({ id: "deck2", name: "Deck2", description: "", createdAt: new Date().toISOString() });
+      cardRepo.createDeck({ id: "deck2", name: "Deck2", description: "", createdAt: new Date().toISOString(), equipped: true });
       cardRepo.insertCard({ ...testCard, id: "other-card", deckId: "deck2" });
       statsRepo.recordAttempt(
         "other-card",

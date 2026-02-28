@@ -37,6 +37,7 @@ On first launch, you'll create a character (name + class), then navigate from th
 3. **Inventory** — Manage equipment (equip/unequip)
 4. **World Map** — View zone progression and mastery
 5. **Stats** — View player statistics and streaks
+6. **Manage Decks** — Toggle which decks are active for reviews and combat
 
 ## Deck Formats
 
@@ -76,7 +77,7 @@ Cards are scheduled using the FSRS algorithm (via ts-fsrs). Answer quality affec
 ## Development
 
 ```bash
-npm test          # Run tests (199 tests)
+npm test          # Run tests (207 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```

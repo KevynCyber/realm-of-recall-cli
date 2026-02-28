@@ -15,6 +15,7 @@ const MENU_ITEMS = [
   { key: "4", label: "World Map", description: "View zone progression", screen: "map" },
   { key: "5", label: "Import Deck", description: "Add new flashcard decks", screen: "import" },
   { key: "6", label: "Stats", description: "View your statistics", screen: "stats" },
+  { key: "7", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
 ] as const;
 
 export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {

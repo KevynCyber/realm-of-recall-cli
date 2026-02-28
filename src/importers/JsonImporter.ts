@@ -24,6 +24,7 @@ export function importJson(filePath: string): { deck: Deck; cards: Card[] } {
     name: data.name,
     description: data.description ?? "",
     createdAt: new Date().toISOString(),
+    equipped: true,
   };
 
   const cards: Card[] = data.cards.map((c) => ({

@@ -124,12 +124,23 @@ export class StatsRepository {
     };
   }
 
-  getDueCardIds(deckId?: string): string[] {
+  getDueCardIds(deckId?: string | string[]): string[] {
     const now = new Date().toISOString();
     let query: string;
     let params: any[];
 
-    if (deckId) {
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id IN (${placeholders})
+          AND (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+        ORDER BY rs.next_review_at ASC
+      `;
+      params = [...deckId, now];
+    } else if (deckId) {
       query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
@@ -152,12 +163,32 @@ export class StatsRepository {
     return rows.map((r) => r.id);
   }
 
-  getDueCards(deckId?: string, limit?: number): string[] {
+  getDueCards(deckId?: string | string[], limit?: number): string[] {
     const now = new Date().toISOString();
     const effectiveLimit = limit ?? 9999;
 
-    if (deckId) {
-      // Due cards (non-new with review time passed) + new cards, up to limit
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      const query = `
+        SELECT id FROM (
+          SELECT c.id, rs.next_review_at FROM cards c
+          JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE c.deck_id IN (${placeholders})
+            AND rs.card_state != 'new'
+            AND rs.next_review_at <= ?
+          UNION ALL
+          SELECT c.id, NULL as next_review_at FROM cards c
+          LEFT JOIN recall_stats rs ON rs.card_id = c.id
+          WHERE c.deck_id IN (${placeholders})
+            AND (rs.card_state IS NULL OR rs.card_state = 'new')
+        )
+        ORDER BY next_review_at ASC
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(...deckId, now, ...deckId, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else if (deckId) {
       const query = `
         SELECT id FROM (
           SELECT c.id, rs.next_review_at FROM cards c

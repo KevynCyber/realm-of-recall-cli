@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.0] - 2026-02-28
+
+### Added
+
+- Equipped Decks feature: toggle which decks are active for hub reviews and combat
+- New Deck Management screen accessible from the hub menu ([7] Manage Decks)
+- `equipped` column on decks table (defaults to equipped) with migration 003
+- Multi-deck filtering in StatsRepository (getDueCards/getDueCardIds accept string[])
+- CardRepository methods: `getEquippedDeckIds()`, `toggleDeckEquipped()`
+- Prevents unequipping the last deck (must always have at least 1 equipped)
+- Hub Adventure, Quick Review, and cards-due count now respect equipped deck selection
+- Zone/Map combat continues to pull from zone-specific decks regardless of equipped status
+
 ## [0.1.0] - 2026-02-28
 
 ### Added

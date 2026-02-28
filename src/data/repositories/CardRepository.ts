@@ -23,6 +23,7 @@ export class CardRepository {
       name: row.name,
       description: row.description,
       createdAt: row.created_at,
+      equipped: row.equipped === 1,
     };
   }
 
@@ -35,7 +36,21 @@ export class CardRepository {
       name: row.name,
       description: row.description,
       createdAt: row.created_at,
+      equipped: row.equipped === 1,
     }));
+  }
+
+  getEquippedDeckIds(): string[] {
+    const rows = this.db
+      .prepare("SELECT id FROM decks WHERE equipped = 1")
+      .all() as any[];
+    return rows.map((row) => row.id);
+  }
+
+  toggleDeckEquipped(deckId: string): void {
+    this.db
+      .prepare("UPDATE decks SET equipped = CASE WHEN equipped = 1 THEN 0 ELSE 1 END WHERE id = ?")
+      .run(deckId);
   }
 
   deleteDeck(id: string): void {

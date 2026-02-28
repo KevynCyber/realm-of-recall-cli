@@ -173,4 +173,8 @@ const migrations = [
       ALTER TABLE recall_stats ADD COLUMN last_review_at TEXT;
     `,
   },
+  {
+    name: "003_deck_equipped",
+    sql: `ALTER TABLE decks ADD COLUMN equipped INTEGER NOT NULL DEFAULT 1;`,
+  },
 ];
