@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("ror")
   .description("Realm of Recall — A CLI RPG powered by flashcard recall")
-  .version("0.2.0")
+  .version("0.3.1")
   .action(() => {
     const { waitUntilExit } = render(React.createElement(App));
     waitUntilExit().then(() => {

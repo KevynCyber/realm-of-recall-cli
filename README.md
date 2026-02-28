@@ -87,6 +87,7 @@ npm run build     # Build with tsup
 - `src/core/` — Pure game logic (combat, progression, scheduling). No UI, no I/O.
 - `src/data/` — SQLite persistence layer (repositories, migrations)
 - `src/components/` — Ink UI components (screens, combat UI, review)
+- `src/importers/` — Deck import logic (JSON, CSV/TSV)
 - `src/types/` — TypeScript type definitions
 
 ## Data

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.3.1] - 2026-02-28
+
+### Fixed
+
+- Version mismatch: `bin/ror.ts` now matches `package.json` (was stuck at 0.2.0)
+- Added missing v0.2.0 CHANGELOG entry documenting the gamification overhaul
+- Added `src/importers/` to README architecture section
+- Replaced stale TODO comment in legacy review command with accurate description
+
 ## [0.3.0] - 2026-02-28
 
 ### Added
@@ -12,6 +21,28 @@
 - Prevents unequipping the last deck (must always have at least 1 equipped)
 - Hub Adventure, Quick Review, and cards-due count now respect equipped deck selection
 - Zone/Map combat continues to pull from zone-specific decks regardless of equipped status
+
+## [0.2.0] - 2026-02-28
+
+### Added
+
+- RPG combat system: turn-based battles powered by flashcard recall
+- Player classes: Scholar (bonus XP), Warrior (high HP/ATK), Rogue (bonus gold/crit)
+- FSRS spaced repetition scheduling (replaced SM-2) via ts-fsrs
+- Equipment and loot system with 4 rarities (common, uncommon, rare, epic)
+- Enemy generator scaling to deck difficulty
+- XP and leveling system with class-based attribute growth
+- Daily streak tracker with XP bonuses (up to +50% at 30 days) and shield protection
+- World map with zone progression tied to deck mastery and boss fights
+- Fullscreen TUI app shell with keyboard navigation
+- All game screens: Title, Hub, Combat, Review, Inventory, Map, Stats
+- Player, Equipment, and Zone repositories (SQLite persistence)
+- FSRS migration for recall_stats scheduling columns
+
+### Changed
+
+- Upgraded from SM-2 to FSRS algorithm for spaced repetition
+- Replaced standalone review command with fullscreen app as default entry point
 
 ## [0.1.0] - 2026-02-28
 

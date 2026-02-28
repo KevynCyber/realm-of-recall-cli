@@ -60,8 +60,8 @@ export function ReviewCommand({ deckId, limit }: Props) {
       const db = getDatabase();
       const statsRepo = new StatsRepository(db);
 
-      // TODO: This legacy review command will be replaced by the fullscreen app.
-      // For now, just record attempts without schedule updates.
+      // Legacy review command — records attempts without schedule updates.
+      // The fullscreen app (default entry point) handles full FSRS scheduling.
       for (const result of reviewResults) {
         statsRepo.ensureStatsExist(result.cardId);
       }
