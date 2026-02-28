@@ -10,9 +10,13 @@ interface ReviewResult {
 
 interface Props {
   results: ReviewResult[];
+  xpEarned?: number;
+  goldEarned?: number;
+  leveledUp?: boolean;
+  newLevel?: number;
 }
 
-export function ReviewSummary({ results }: Props) {
+export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel }: Props) {
   const total = results.length;
   const perfect = results.filter(
     (r) => r.quality === AnswerQuality.Perfect,
@@ -63,6 +67,15 @@ export function ReviewSummary({ results }: Props) {
       <Text>
         Avg time: <Text bold>{avgTime.toFixed(1)}s</Text>
       </Text>
+      {xpEarned !== undefined && (
+        <Text color="magenta">XP earned: +{xpEarned}</Text>
+      )}
+      {goldEarned !== undefined && (
+        <Text color="yellow">Gold: +{goldEarned}</Text>
+      )}
+      {leveledUp && newLevel !== undefined && (
+        <Text bold color="yellow">LEVEL UP! You are now level {newLevel}!</Text>
+      )}
     </Box>
   );
 }

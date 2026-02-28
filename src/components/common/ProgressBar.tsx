@@ -8,6 +8,8 @@ interface Props {
   emptyChar?: string;
   filledColor?: string;
   emptyColor?: string;
+  color?: string;
+  label?: string;
 }
 
 export function ProgressBar({
@@ -17,15 +19,19 @@ export function ProgressBar({
   emptyChar = "░",
   filledColor = "green",
   emptyColor = "gray",
+  color,
+  label,
 }: Props) {
   const clamped = Math.max(0, Math.min(1, value));
   const filled = Math.round(clamped * width);
   const empty = width - filled;
+  const barColor = color ?? filledColor;
 
   return (
     <Text>
-      <Text color={filledColor}>{filledChar.repeat(filled)}</Text>
+      <Text color={barColor}>{filledChar.repeat(filled)}</Text>
       <Text color={emptyColor}>{emptyChar.repeat(empty)}</Text>
+      {label ? <Text> {label}</Text> : null}
     </Text>
   );
 }
