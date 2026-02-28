@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { RecallAttempt, ScheduleData } from "../../types/index.js";
-import { AnswerQuality } from "../../types/index.js";
+import { AnswerQuality, ConfidenceLevel } from "../../types/index.js";
 
 export class StatsRepository {
   constructor(private db: Database.Database) {}
@@ -17,13 +17,14 @@ export class StatsRepository {
     cardId: string,
     attempt: RecallAttempt,
     schedule: ScheduleData,
+    evolutionTier?: number,
   ): void {
     const tx = this.db.transaction(() => {
       // Insert attempt
       this.db
         .prepare(
-          `INSERT INTO recall_attempts (card_id, timestamp, response_time, quality, was_timed)
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO recall_attempts (card_id, timestamp, response_time, quality, was_timed, confidence, retrieval_mode, response_text)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           cardId,
@@ -31,6 +32,9 @@ export class StatsRepository {
           attempt.responseTime,
           attempt.quality,
           attempt.wasTimed ? 1 : 0,
+          attempt.confidence ?? null,
+          attempt.retrievalMode ?? "standard",
+          attempt.responseText ?? null,
         );
 
       // Determine if correct
@@ -39,13 +43,23 @@ export class StatsRepository {
         attempt.quality === AnswerQuality.Correct ||
         attempt.quality === AnswerQuality.Partial;
 
+      // Determine gap_streak change
+      let gapStreakExpr: string;
+      if (correct && attempt.confidence === ConfidenceLevel.Guess) {
+        gapStreakExpr = "gap_streak + 1";
+      } else {
+        gapStreakExpr = "0";
+      }
+
+      // Determine evolution_tier update
+      const evolutionTierExpr =
+        evolutionTier !== undefined ? "?" : "evolution_tier";
+
       // Upsert stats
       this.ensureStatsExist(cardId);
 
       if (correct) {
-        this.db
-          .prepare(
-            `UPDATE recall_stats SET
+        const sql = `UPDATE recall_stats SET
               total_attempts = total_attempts + 1,
               correct_count = correct_count + 1,
               consecutive_correct = consecutive_correct + 1,
@@ -57,24 +71,29 @@ export class StatsRepository {
               lapses = ?,
               card_state = ?,
               last_review_at = ?,
-              next_review_at = ?
-            WHERE card_id = ?`,
-          )
-          .run(
-            attempt.responseTime,
-            schedule.difficulty,
-            schedule.stability,
-            schedule.reps,
-            schedule.lapses,
-            schedule.state,
-            schedule.lastReview,
-            schedule.due,
-            cardId,
-          );
+              next_review_at = ?,
+              gap_streak = ${gapStreakExpr},
+              evolution_tier = ${evolutionTierExpr}
+            WHERE card_id = ?`;
+
+        const params: any[] = [
+          attempt.responseTime,
+          schedule.difficulty,
+          schedule.stability,
+          schedule.reps,
+          schedule.lapses,
+          schedule.state,
+          schedule.lastReview,
+          schedule.due,
+        ];
+        if (evolutionTier !== undefined) {
+          params.push(evolutionTier);
+        }
+        params.push(cardId);
+
+        this.db.prepare(sql).run(...params);
       } else {
-        this.db
-          .prepare(
-            `UPDATE recall_stats SET
+        const sql = `UPDATE recall_stats SET
               total_attempts = total_attempts + 1,
               consecutive_correct = 0,
               total_response_time = total_response_time + ?,
@@ -84,30 +103,39 @@ export class StatsRepository {
               lapses = ?,
               card_state = ?,
               last_review_at = ?,
-              next_review_at = ?
-            WHERE card_id = ?`,
-          )
-          .run(
-            attempt.responseTime,
-            schedule.difficulty,
-            schedule.stability,
-            schedule.reps,
-            schedule.lapses,
-            schedule.state,
-            schedule.lastReview,
-            schedule.due,
-            cardId,
-          );
+              next_review_at = ?,
+              gap_streak = 0,
+              evolution_tier = ${evolutionTierExpr}
+            WHERE card_id = ?`;
+
+        const params: any[] = [
+          attempt.responseTime,
+          schedule.difficulty,
+          schedule.stability,
+          schedule.reps,
+          schedule.lapses,
+          schedule.state,
+          schedule.lastReview,
+          schedule.due,
+        ];
+        if (evolutionTier !== undefined) {
+          params.push(evolutionTier);
+        }
+        params.push(cardId);
+
+        this.db.prepare(sql).run(...params);
       }
     });
 
     tx();
   }
 
-  getSchedule(cardId: string): ScheduleData | undefined {
+  getSchedule(
+    cardId: string,
+  ): (ScheduleData & { evolutionTier: number; gapStreak: number }) | undefined {
     const row = this.db
       .prepare(
-        `SELECT difficulty, stability, repetitions, lapses, card_state, last_review_at, next_review_at
+        `SELECT difficulty, stability, repetitions, lapses, card_state, last_review_at, next_review_at, evolution_tier, gap_streak
          FROM recall_stats WHERE card_id = ?`,
       )
       .get(cardId) as any | undefined;
@@ -121,7 +149,69 @@ export class StatsRepository {
       state: row.card_state,
       due: row.next_review_at,
       lastReview: row.last_review_at,
+      evolutionTier: row.evolution_tier,
+      gapStreak: row.gap_streak,
     };
+  }
+
+  getCardEvolutionTier(cardId: string): number {
+    const row = this.db
+      .prepare(`SELECT evolution_tier FROM recall_stats WHERE card_id = ?`)
+      .get(cardId) as any | undefined;
+    return row ? row.evolution_tier : 0;
+  }
+
+  getCardGapStreak(cardId: string): number {
+    const row = this.db
+      .prepare(`SELECT gap_streak FROM recall_stats WHERE card_id = ?`)
+      .get(cardId) as any | undefined;
+    return row ? row.gap_streak : 0;
+  }
+
+  getRecentQualities(cardId: string, limit = 5): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT quality FROM recall_attempts WHERE card_id = ? ORDER BY timestamp DESC LIMIT ?`,
+      )
+      .all(cardId, limit) as any[];
+    return rows.map((r) => r.quality);
+  }
+
+  getRecentModes(cardId: string, limit = 5): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT retrieval_mode FROM recall_attempts WHERE card_id = ? ORDER BY timestamp DESC LIMIT ?`,
+      )
+      .all(cardId, limit) as any[];
+    return rows.map((r) => r.retrieval_mode);
+  }
+
+  getAccuracyHistory(limit = 14): number[] {
+    const rows = this.db
+      .prepare(
+        `SELECT date(timestamp/1000, 'unixepoch') as day,
+                CAST(SUM(CASE WHEN quality IN ('perfect','correct','partial') THEN 1 ELSE 0 END) AS REAL) / COUNT(*) as accuracy
+         FROM recall_attempts
+         GROUP BY day
+         ORDER BY day DESC
+         LIMIT ?`,
+      )
+      .all(limit) as any[];
+    return rows.map((r) => r.accuracy);
+  }
+
+  getResponseTimeHistory(limit = 14): number[] {
+    const rows = this.db
+      .prepare(
+        `SELECT date(timestamp/1000, 'unixepoch') as day,
+                AVG(response_time) as avg_time
+         FROM recall_attempts
+         GROUP BY day
+         ORDER BY day DESC
+         LIMIT ?`,
+      )
+      .all(limit) as any[];
+    return rows.map((r) => r.avg_time);
   }
 
   getDueCardIds(deckId?: string | string[]): string[] {

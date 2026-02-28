@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import { getInMemoryDatabase } from "../../src/data/database.js";
 import { CardRepository } from "../../src/data/repositories/CardRepository.js";
 import { StatsRepository } from "../../src/data/repositories/StatsRepository.js";
-import { AnswerQuality, CardType, type Card, type Deck, type ScheduleData } from "../../src/types/index.js";
+import { AnswerQuality, CardType, ConfidenceLevel, RetrievalMode, type Card, type Deck, type ScheduleData } from "../../src/types/index.js";
 
 let db: Database.Database;
 let cardRepo: CardRepository;
@@ -601,6 +601,312 @@ describe("StatsRepository", () => {
       const stats = statsRepo.getDeckMasteryStats("deck1");
       expect(stats.total).toBe(5);
       expect(stats.reviewCount).toBe(0);
+    });
+  });
+
+  describe("Ultra-Learner fields", () => {
+    it("stores confidence correctly in recall_attempts", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Knew,
+        },
+        makeSchedule(),
+      );
+
+      const row = db
+        .prepare("SELECT confidence FROM recall_attempts WHERE card_id = ?")
+        .get("card1") as any;
+      expect(row.confidence).toBe("knew");
+    });
+
+    it("stores retrieval_mode correctly in recall_attempts", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          retrievalMode: RetrievalMode.Reversed,
+        },
+        makeSchedule(),
+      );
+
+      const row = db
+        .prepare("SELECT retrieval_mode FROM recall_attempts WHERE card_id = ?")
+        .get("card1") as any;
+      expect(row.retrieval_mode).toBe("reversed");
+    });
+
+    it("increments gap_streak when correct + confidence='guess'", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule(),
+      );
+
+      expect(statsRepo.getCardGapStreak("card1")).toBe(1);
+
+      // Second guess should increment again
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now() + 1,
+          responseTime: 2.0,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule(),
+      );
+
+      expect(statsRepo.getCardGapStreak("card1")).toBe(2);
+    });
+
+    it("resets gap_streak when correct + confidence='knew'", () => {
+      // First: build up a streak with guess
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule(),
+      );
+      expect(statsRepo.getCardGapStreak("card1")).toBe(1);
+
+      // Now answer with 'knew' confidence - should reset
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now() + 1,
+          responseTime: 1.5,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Knew,
+        },
+        makeSchedule(),
+      );
+      expect(statsRepo.getCardGapStreak("card1")).toBe(0);
+    });
+
+    it("resets gap_streak on wrong answer", () => {
+      // Build up a streak
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule(),
+      );
+      expect(statsRepo.getCardGapStreak("card1")).toBe(1);
+
+      // Wrong answer resets
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now() + 1,
+          responseTime: 5.0,
+          quality: AnswerQuality.Wrong,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule({ state: "relearning", lapses: 1 }),
+      );
+      expect(statsRepo.getCardGapStreak("card1")).toBe(0);
+    });
+
+    it("returns 0 for getCardEvolutionTier when not found", () => {
+      expect(statsRepo.getCardEvolutionTier("nonexistent-card")).toBe(0);
+    });
+
+    it("updates evolution_tier when provided", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule(),
+        2,
+      );
+      expect(statsRepo.getCardEvolutionTier("card1")).toBe(2);
+    });
+
+    it("returns qualities in reverse chronological order", () => {
+      const qualities = [
+        AnswerQuality.Wrong,
+        AnswerQuality.Partial,
+        AnswerQuality.Correct,
+        AnswerQuality.Perfect,
+      ];
+      for (let i = 0; i < qualities.length; i++) {
+        statsRepo.recordAttempt(
+          "card1",
+          {
+            cardId: "card1",
+            timestamp: 1000 + i,
+            responseTime: 2.0,
+            quality: qualities[i],
+            wasTimed: false,
+          },
+          makeSchedule({ state: qualities[i] === AnswerQuality.Wrong ? "relearning" : "learning" }),
+        );
+      }
+
+      const recent = statsRepo.getRecentQualities("card1");
+      expect(recent).toEqual(["perfect", "correct", "partial", "wrong"]);
+    });
+
+    it("returns modes in reverse chronological order", () => {
+      const modes = [
+        RetrievalMode.Standard,
+        RetrievalMode.Reversed,
+        RetrievalMode.Teach,
+      ];
+      for (let i = 0; i < modes.length; i++) {
+        statsRepo.recordAttempt(
+          "card1",
+          {
+            cardId: "card1",
+            timestamp: 1000 + i,
+            responseTime: 2.0,
+            quality: AnswerQuality.Correct,
+            wasTimed: false,
+            retrievalMode: modes[i],
+          },
+          makeSchedule(),
+        );
+      }
+
+      const recent = statsRepo.getRecentModes("card1");
+      expect(recent).toEqual(["teach", "reversed", "standard"]);
+    });
+
+    it("returns per-day accuracy from getAccuracyHistory", () => {
+      // Create attempts for a specific day (use a known timestamp)
+      // Jan 1, 2026 00:00:00 UTC = 1767225600000
+      const dayTs = 1767225600000;
+
+      // 2 correct, 1 wrong = 2/3 accuracy
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: dayTs,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule(),
+      );
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: dayTs + 1000,
+          responseTime: 2.0,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule(),
+      );
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: dayTs + 2000,
+          responseTime: 5.0,
+          quality: AnswerQuality.Wrong,
+          wasTimed: false,
+        },
+        makeSchedule({ state: "relearning", lapses: 1 }),
+      );
+
+      const accuracy = statsRepo.getAccuracyHistory(14);
+      expect(accuracy).toHaveLength(1);
+      expect(accuracy[0]).toBeCloseTo(2 / 3, 5);
+    });
+
+    it("getSchedule returns evolutionTier and gapStreak", () => {
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+          confidence: ConfidenceLevel.Guess,
+        },
+        makeSchedule(),
+        1,
+      );
+
+      const sched = statsRepo.getSchedule("card1");
+      expect(sched).toBeDefined();
+      expect(sched!.evolutionTier).toBe(1);
+      expect(sched!.gapStreak).toBe(1);
+    });
+
+    it("getResponseTimeHistory returns avg response time per day", () => {
+      const dayTs = 1767225600000;
+
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: dayTs,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule(),
+      );
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: dayTs + 1000,
+          responseTime: 4.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule(),
+      );
+
+      const history = statsRepo.getResponseTimeHistory(14);
+      expect(history).toHaveLength(1);
+      expect(history[0]).toBeCloseTo(3.0, 5);
     });
   });
 });
