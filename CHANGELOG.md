@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0] - 2026-02-28
+
+### Added
+
+- **Diminishing-Cues Hints (US-002)**: Press [H] during review for progressive hints. 4 reveal levels (first letter → every 3rd → every other → full). Based on Fiechter & Benjamin (2017) research.
+- **Cross-Deck Interleaving (US-003)**: Cards from multiple decks are mixed with a max-2-consecutive constraint. Research shows ~30% better retention (Bjork).
+- **Achievement System (US-004)**: 24 achievements across 4 categories (Learning, Combat, Progression, Exploration). Tracked in SQLite with unlock timestamps. New Achievement screen in hub menu.
+- **Ascension System (US-005)**: 10-level difficulty scaling with cumulative modifiers (hardened foes, time pressure, no mercy, brutal strikes, weakened start, scarce loot, no hints, venomous, precision required, nightmare).
+- **Class Abilities (US-006)**: 9 abilities (3 per class) with SP costs and cooldowns. Scholar: Reveal/Insight/Wisdom Surge. Warrior: Endure/Battle Cry/Fortify. Rogue: Steal/Shadow Strike/Lucky Find.
+- **Daily Challenge (US-007)**: Deterministic daily encounters seeded by date (Mulberry32 PRNG). Scoring based on accuracy (0-500), speed (0-300), and damage (0-200). 2x gold, 1.5x XP multipliers.
+- **Random Events (US-008)**: 8 event types between dungeon floors (Treasure Room, Wandering Merchant, Mysterious Shrine, Card Blessing, Rest Camp, Cursed Chest, Wisdom Well, Streak Guardian). HP-weighted selection.
+- **Dungeon Run (US-009)**: 5-floor gauntlet with scaling difficulty (1.0x→3.0x HP). Floor 5 is a boss. Rewards: completed=2x, defeated=0.5x, retreated=1x.
+- **AchievementScreen**: Scrollable category-grouped achievement display with unlock status.
+- **DailyChallengeScreen**: Shows daily enemy, score, and bonus multipliers.
+- **DungeonRunScreen**: Multi-floor dungeon with random events between floors.
+- **Hub Menu**: Added Dungeon Run, Daily Challenge, and Achievements to navigation.
+- **Achievement Repository**: SQLite persistence for achievement unlocks.
+- **Migration 005_perfect_game**: achievements table, player fields for ascension, skill points, daily challenges.
+- 189 new tests (649 total across 34 test files)
+
 ## [0.4.0] - 2026-02-28
 
 ### Added
