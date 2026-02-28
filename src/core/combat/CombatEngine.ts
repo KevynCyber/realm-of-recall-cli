@@ -1,8 +1,11 @@
 // CombatEngine — resolves combat turns based on flashcard answer quality
 
 import type { Enemy, CombatEvent, CombatAction } from "../../types/combat.js";
-import { AnswerQuality } from "../../types/index.js";
+import { AnswerQuality, ConfidenceLevel, RetrievalMode } from "../../types/index.js";
 import { calculateCombatXP, calculateGoldReward } from "../progression/XPCalculator.js";
+import { getTierDamageMultiplier, getTierCritBonus } from "../cards/CardEvolution.js";
+import type { EvolutionTier } from "../cards/CardEvolution.js";
+import { getModeDamageMultiplier } from "../review/ModeSelector.js";
 
 export interface CombatState {
   enemy: Enemy;
@@ -50,6 +53,9 @@ export function resolveTurn(
   playerDefense: number,
   critChance: number,
   rng: () => number = Math.random,
+  confidence?: ConfidenceLevel,
+  evolutionTier?: number,
+  retrievalMode?: RetrievalMode,
 ): { newState: CombatState; event: CombatEvent } {
   // Deep copy state
   const newState: CombatState = {
@@ -58,6 +64,10 @@ export function resolveTurn(
     events: [...state.events],
     stats: { ...state.stats },
   };
+
+  // Calculate tier and mode multipliers
+  const tierMult = getTierDamageMultiplier((evolutionTier ?? 0) as EvolutionTier);
+  const modeMult = getModeDamageMultiplier(retrievalMode ?? RetrievalMode.Standard);
 
   // Apply poison from previous turn if present
   if (newState.poisonDamage > 0) {
@@ -76,27 +86,36 @@ export function resolveTurn(
 
   switch (answerQuality) {
     case AnswerQuality.Perfect: {
-      const isCrit = rng() < critChance / 100;
+      const baseMult = confidence === ConfidenceLevel.Instant ? 2.5
+        : confidence === ConfidenceLevel.Knew ? 2.0
+        : confidence === ConfidenceLevel.Guess ? 1.0
+        : 2.0;
+      const effectiveCrit = critChance + getTierCritBonus((evolutionTier ?? 0) as EvolutionTier);
+      const isCrit = rng() < effectiveCrit / 100;
       if (isCrit) {
-        damage = Math.floor(playerAttack * 2.5);
+        damage = Math.floor(playerAttack * (baseMult + 0.5) * tierMult * modeMult);
         action = "player_critical";
       } else {
-        damage = playerAttack * 2;
-        action = "player_attack";
+        damage = Math.floor(playerAttack * baseMult * tierMult * modeMult);
+        action = confidence === ConfidenceLevel.Guess ? "player_glancing" : "player_attack";
       }
       newState.enemy.hp -= damage;
       newState.stats.perfectCount++;
       break;
     }
     case AnswerQuality.Correct: {
-      damage = playerAttack;
-      action = "player_attack";
+      const baseMult = confidence === ConfidenceLevel.Instant ? 1.5
+        : confidence === ConfidenceLevel.Knew ? 1.0
+        : confidence === ConfidenceLevel.Guess ? 0.5
+        : 1.0;
+      damage = Math.floor(playerAttack * baseMult * tierMult * modeMult);
+      action = confidence === ConfidenceLevel.Guess ? "player_glancing" : "player_attack";
       newState.enemy.hp -= damage;
       newState.stats.correctCount++;
       break;
     }
     case AnswerQuality.Partial: {
-      damage = Math.floor(playerAttack * 0.5);
+      damage = Math.floor(playerAttack * 0.5 * tierMult * modeMult);
       action = "player_glancing";
       newState.enemy.hp -= damage;
       newState.stats.partialCount++;
