@@ -1,4 +1,4 @@
-import { AnswerQuality, type ScheduleData } from "../../types/index.js";
+import { AnswerQuality, type LegacyScheduleData } from "../../types/index.js";
 
 /**
  * SM-2 spaced repetition algorithm.
@@ -21,7 +21,7 @@ const QUALITY_MAP: Record<AnswerQuality, number> = {
   [AnswerQuality.Timeout]: 0,
 };
 
-export function createInitialSchedule(cardId: string): ScheduleData {
+export function createInitialSchedule(cardId: string): LegacyScheduleData {
   return {
     cardId,
     easeFactor: 2.5,
@@ -32,9 +32,9 @@ export function createInitialSchedule(cardId: string): ScheduleData {
 }
 
 export function updateSchedule(
-  schedule: ScheduleData,
+  schedule: LegacyScheduleData,
   quality: AnswerQuality,
-): ScheduleData {
+): LegacyScheduleData {
   const q = QUALITY_MAP[quality];
 
   let { easeFactor, intervalDays, repetitions } = schedule;
@@ -71,6 +71,6 @@ export function updateSchedule(
   };
 }
 
-export function isDueForReview(schedule: ScheduleData): boolean {
+export function isDueForReview(schedule: LegacyScheduleData): boolean {
   return new Date(schedule.nextReviewAt) <= new Date();
 }

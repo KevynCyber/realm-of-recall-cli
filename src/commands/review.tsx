@@ -6,7 +6,7 @@ import { StatsRepository } from "../data/repositories/StatsRepository.js";
 import { ReviewScreen } from "../components/review/ReviewScreen.js";
 import { ReviewSummary } from "../components/review/ReviewSummary.js";
 import { updateSchedule } from "../core/spaced-repetition/Scheduler.js";
-import { AnswerQuality, type Card, type ScheduleData } from "../types/index.js";
+import { AnswerQuality, type Card, type LegacyScheduleData } from "../types/index.js";
 
 interface ReviewResult {
   cardId: string;
@@ -63,7 +63,7 @@ export function ReviewCommand({ deckId, limit }: Props) {
 
       for (const result of reviewResults) {
         const existing = statsRepo.getSchedule(result.cardId);
-        const schedule: ScheduleData = existing ?? {
+        const schedule: LegacyScheduleData = existing ?? {
           cardId: result.cardId,
           easeFactor: 2.5,
           intervalDays: 0,

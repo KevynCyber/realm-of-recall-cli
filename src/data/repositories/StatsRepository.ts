@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { RecallAttempt, ScheduleData } from "../../types/index.js";
+import type { RecallAttempt, LegacyScheduleData } from "../../types/index.js";
 import { AnswerQuality } from "../../types/index.js";
 
 export class StatsRepository {
@@ -16,7 +16,7 @@ export class StatsRepository {
   recordAttempt(
     cardId: string,
     attempt: RecallAttempt,
-    schedule: ScheduleData,
+    schedule: LegacyScheduleData,
   ): void {
     const tx = this.db.transaction(() => {
       // Insert attempt
@@ -92,7 +92,7 @@ export class StatsRepository {
     tx();
   }
 
-  getSchedule(cardId: string): ScheduleData | undefined {
+  getSchedule(cardId: string): LegacyScheduleData | undefined {
     const row = this.db
       .prepare(
         "SELECT ease_factor, interval_days, repetitions, next_review_at FROM recall_stats WHERE card_id = ?",

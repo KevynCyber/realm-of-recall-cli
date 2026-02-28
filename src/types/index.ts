@@ -51,8 +51,8 @@ export interface CardStats {
   totalResponseTime: number;
 }
 
-// SM-2 scheduling
-export interface ScheduleData {
+// SM-2 scheduling (legacy)
+export interface LegacyScheduleData {
   cardId: string;
   easeFactor: number;
   intervalDays: number;
@@ -60,8 +60,34 @@ export interface ScheduleData {
   nextReviewAt: string; // ISO date string
 }
 
+// FSRS scheduling
+export interface ScheduleData {
+  cardId: string;
+  difficulty: number;
+  stability: number;
+  reps: number;
+  lapses: number;
+  state: "new" | "learning" | "review" | "relearning";
+  due: string;
+  lastReview: string;
+}
+
+// Zone
+export interface Zone {
+  id: string;
+  name: string;
+  deckId: string;
+  requiredMastery: number;
+  bossDefeated: boolean;
+  orderIndex: number;
+}
+
 // Cloze parsing
 export interface ClozeResult {
   displayText: string;
   answers: string[];
 }
+
+// Re-exports
+export * from "./player.js";
+export * from "./combat.js";

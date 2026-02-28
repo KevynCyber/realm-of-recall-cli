@@ -16,16 +16,25 @@
     "node": ">=18"
   },
   "dependencies": {
+    "@inkjs/ui": "^2.0.0",
     "better-sqlite3": "^11.7.0",
     "commander": "^13.1.0",
+    "fullscreen-ink": "^0.1.0",
     "ink": "^5.1.0",
+    "ink-big-text": "^2.0.0",
+    "ink-gradient": "^3.0.0",
     "ink-text-input": "^6.0.0",
     "react": "^18.3.1",
+    "ts-fsrs": "^5.2.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.2.4",
     "@types/better-sqlite3": "^7.6.12",
     "@types/react": "^18.3.0",
+    "@vitest/coverage-v8": "^2.1.9",
+    "fast-check": "^4.5.3",
+    "ink-testing-library": "^4.0.0",
     "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.4.0",
