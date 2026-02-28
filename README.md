@@ -2,7 +2,17 @@
 
 A CLI RPG where combat is powered by flashcard recall. Built with Ink, SQLite, and TypeScript.
 
-Learn anything through spaced repetition, gamified with RPG combat, progression, and memory techniques.
+Learn anything through spaced repetition, gamified with RPG combat, progression, and loot.
+
+## Features
+
+- **RPG Combat** — Answer flashcards to deal damage. Perfect answers crit, wrong answers let enemies strike back.
+- **Player Classes** — Scholar (bonus XP), Warrior (high HP/ATK), Rogue (bonus gold/crit).
+- **FSRS Scheduling** — Modern spaced repetition algorithm for optimal review timing.
+- **Equipment & Loot** — Defeat enemies to earn gear across 4 rarities (common, uncommon, rare, epic).
+- **Streak System** — Daily study streaks with XP bonuses (up to +50% at 30 days) and shield protection.
+- **World Map** — Zone progression tied to deck mastery with boss fights.
+- **Fullscreen TUI** — Polished terminal interface with keyboard navigation.
 
 ## Install
 
@@ -13,18 +23,20 @@ npm install
 ## Usage
 
 ```bash
-# Import a deck
+# Launch the game
+npx tsx bin/ror.ts
+
+# Import a deck (creates a zone on the world map)
 npx tsx bin/ror.ts import assets/sample-decks/geography.json
-
-# Review due cards
-npx tsx bin/ror.ts review
-
-# Review with a card limit
-npx tsx bin/ror.ts review -n 5
-
-# List your decks
-npx tsx bin/ror.ts decks
 ```
+
+On first launch, you'll create a character (name + class), then navigate from the hub:
+
+1. **Adventure** — Enter combat with due flashcards
+2. **Quick Review** — Review cards without combat (still earns XP)
+3. **Inventory** — Manage equipment (equip/unequip)
+4. **World Map** — View zone progression and mastery
+5. **Stats** — View player statistics and streaks
 
 ## Deck Formats
 
@@ -54,20 +66,27 @@ Cloze deletions are supported: `{{c1::answer::hint}}`
 
 ## Spaced Repetition
 
-Cards are scheduled using the SM-2 algorithm. Answer quality affects when you'll see a card again:
+Cards are scheduled using the FSRS algorithm (via ts-fsrs). Answer quality affects scheduling:
 
-- **Perfect** (fast exact match) — longer interval
-- **Correct** (exact match) — normal interval
-- **Partial** (substring match) — shorter interval
-- **Wrong** / **Timeout** — reset to 1 day
+- **Perfect** (fast exact match) — Easy rating, longer interval
+- **Correct** (exact match) — Good rating, normal interval
+- **Partial** (substring match) — Hard rating, shorter interval
+- **Wrong** / **Timeout** — Again rating, relearn
 
 ## Development
 
 ```bash
-npm test          # Run tests
+npm test          # Run tests (199 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```
+
+## Architecture
+
+- `src/core/` — Pure game logic (combat, progression, scheduling). No UI, no I/O.
+- `src/data/` — SQLite persistence layer (repositories, migrations)
+- `src/components/` — Ink UI components (screens, combat UI, review)
+- `src/types/` — TypeScript type definitions
 
 ## Data
 
