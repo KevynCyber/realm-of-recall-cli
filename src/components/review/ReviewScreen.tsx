@@ -8,6 +8,7 @@ import {
   RetrievalMode,
 } from "../../types/index.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
+import { generateHint, getMaxHintLevel, isFullReveal } from "../../core/cards/HintGenerator.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 
@@ -60,9 +61,13 @@ export function ReviewScreen({
   const [pendingResponseText, setPendingResponseText] = useState<
     string | undefined
   >(undefined);
+  // Hint system
+  const [hintLevel, setHintLevel] = useState(0);
+  const [showHint, setShowHint] = useState(false);
 
   const card = cards[currentIndex];
   const totalTime = 30; // seconds
+  const isTeach = mode === RetrievalMode.Teach;
 
   // Build the "effective" card used for display & evaluation.
   const effectiveCard: Card | undefined =
@@ -99,6 +104,8 @@ export function ReviewScreen({
         setLastQuality(null);
         setCardStart(Date.now());
         setPendingResponseText(undefined);
+        setHintLevel(0);
+        setShowHint(false);
       }
     },
     [cards.length, currentIndex, onComplete],
@@ -225,6 +232,20 @@ export function ReviewScreen({
     { isActive: phase === "teach_rate" },
   );
 
+  // Hint key handler — press H during question phase to reveal progressive hints
+  useInput(
+    (_input) => {
+      if (_input === "h" || _input === "H") {
+        if (!showHint) {
+          setShowHint(true);
+        } else if (!isFullReveal(hintLevel + 1)) {
+          setHintLevel((l) => Math.min(l + 1, getMaxHintLevel()));
+        }
+      }
+    },
+    { isActive: phase === "question" && !isTeach },
+  );
+
   // --------------------------------------------------------------- guard
   if (!card || !effectiveCard) {
     onComplete(results);
@@ -239,8 +260,6 @@ export function ReviewScreen({
         ? 1
         : 0)) /
     cards.length;
-
-  const isTeach = mode === RetrievalMode.Teach;
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -279,11 +298,28 @@ export function ReviewScreen({
         </Box>
       )}
 
+      {/* Hint display */}
+      {!isTeach && phase === "question" && showHint && effectiveCard && (
+        <Box marginTop={1}>
+          <Text color="cyan">
+            Hint: {generateHint(effectiveCard.back, hintLevel)}
+          </Text>
+          {!isFullReveal(hintLevel + 1) ? (
+            <Text dimColor>  [H] more</Text>
+          ) : null}
+        </Box>
+      )}
+
       {/* Standard/Reversed: question phase — text input */}
       {!isTeach && phase === "question" && (
-        <Box marginTop={1}>
-          <Text bold>Your answer: </Text>
-          <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
+        <Box marginTop={1} flexDirection="column">
+          <Box>
+            <Text bold>Your answer: </Text>
+            <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
+          </Box>
+          {!showHint && (
+            <Text dimColor italic>Press [H] for a hint</Text>
+          )}
         </Box>
       )}
 
