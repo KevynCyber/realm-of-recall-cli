@@ -1,76 +1,129 @@
-import { AnswerQuality, type LegacyScheduleData } from "../../types/index.js";
+import {
+  createEmptyCard,
+  fsrs,
+  generatorParameters,
+  Rating,
+  State,
+  type Card as FSRSCard,
+  type Grade,
+} from "ts-fsrs";
+import { AnswerQuality, type ScheduleData } from "../../types/index.js";
 
 /**
- * SM-2 spaced repetition algorithm.
+ * FSRS spaced repetition scheduler.
  *
- * Quality mapping:
- *   Perfect=5, Correct=4, Partial=3, Wrong=1, Timeout=0
- *
- * Algorithm:
- *   - quality >= 3: increment repetitions, update interval
- *   - quality < 3: reset to 0 repetitions, interval = 1
- *   - ease_factor adjusted by: -0.8 + 0.28*q - 0.02*q*q
- *   - ease_factor minimum: 1.3
+ * Replaces the legacy SM-2 algorithm with the FSRS algorithm (ts-fsrs).
+ * Maps our AnswerQuality enum to FSRS Rating values.
  */
 
-const QUALITY_MAP: Record<AnswerQuality, number> = {
-  [AnswerQuality.Perfect]: 5,
-  [AnswerQuality.Correct]: 4,
-  [AnswerQuality.Partial]: 3,
-  [AnswerQuality.Wrong]: 1,
-  [AnswerQuality.Timeout]: 0,
+const QUALITY_TO_RATING: Record<AnswerQuality, Grade> = {
+  [AnswerQuality.Perfect]: Rating.Easy,
+  [AnswerQuality.Correct]: Rating.Good,
+  [AnswerQuality.Partial]: Rating.Hard,
+  [AnswerQuality.Wrong]: Rating.Again,
+  [AnswerQuality.Timeout]: Rating.Again,
 };
 
-export function createInitialSchedule(cardId: string): LegacyScheduleData {
+const STATE_TO_STRING: Record<State, ScheduleData["state"]> = {
+  [State.New]: "new",
+  [State.Learning]: "learning",
+  [State.Review]: "review",
+  [State.Relearning]: "relearning",
+};
+
+const STRING_TO_STATE: Record<ScheduleData["state"], State> = {
+  new: State.New,
+  learning: State.Learning,
+  review: State.Review,
+  relearning: State.Relearning,
+};
+
+// Module-level FSRS instance with fuzz enabled
+const f = fsrs(generatorParameters({ enable_fuzz: true }));
+
+export function createInitialSchedule(cardId: string): ScheduleData {
+  const now = new Date();
   return {
     cardId,
-    easeFactor: 2.5,
-    intervalDays: 0,
-    repetitions: 0,
-    nextReviewAt: new Date().toISOString(),
+    difficulty: 0,
+    stability: 0,
+    reps: 0,
+    lapses: 0,
+    state: "new",
+    due: now.toISOString(),
+    lastReview: now.toISOString(),
   };
 }
 
 export function updateSchedule(
-  schedule: LegacyScheduleData,
+  schedule: ScheduleData,
   quality: AnswerQuality,
-): LegacyScheduleData {
-  const q = QUALITY_MAP[quality];
+): ScheduleData {
+  const rating = QUALITY_TO_RATING[quality];
+  const now = new Date();
 
-  let { easeFactor, intervalDays, repetitions } = schedule;
+  // Reconstruct a ts-fsrs Card from our ScheduleData
+  const card: FSRSCard = {
+    due: new Date(schedule.due),
+    stability: schedule.stability,
+    difficulty: schedule.difficulty,
+    elapsed_days: 0,
+    scheduled_days: 0,
+    learning_steps: 0,
+    reps: schedule.reps,
+    lapses: schedule.lapses,
+    state: STRING_TO_STATE[schedule.state],
+    last_review: schedule.lastReview
+      ? new Date(schedule.lastReview)
+      : undefined,
+  };
 
-  // Update ease factor
-  easeFactor = easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
-  if (easeFactor < 1.3) easeFactor = 1.3;
-
-  if (q >= 3) {
-    // Successful recall
-    repetitions++;
-    if (repetitions === 1) {
-      intervalDays = 1;
-    } else if (repetitions === 2) {
-      intervalDays = 6;
-    } else {
-      intervalDays = Math.round(intervalDays * easeFactor);
-    }
-  } else {
-    // Failed recall — reset
-    repetitions = 0;
-    intervalDays = 1;
-  }
-
-  const nextReview = new Date();
-  nextReview.setDate(nextReview.getDate() + intervalDays);
+  // Use f.next() to get the result for the specific rating
+  const result = f.next(card, now, rating);
+  const nextCard = result.card;
 
   return {
     cardId: schedule.cardId,
-    easeFactor,
-    intervalDays,
-    repetitions,
-    nextReviewAt: nextReview.toISOString(),
+    difficulty: nextCard.difficulty,
+    stability: nextCard.stability,
+    reps: nextCard.reps,
+    lapses: nextCard.lapses,
+    state: STATE_TO_STRING[nextCard.state],
+    due: nextCard.due.toISOString(),
+    lastReview: nextCard.last_review
+      ? nextCard.last_review.toISOString()
+      : now.toISOString(),
   };
 }
 
-export function isDueForReview(schedule: LegacyScheduleData): boolean {
-  return new Date(schedule.nextReviewAt) <= new Date();
+export function isDueForReview(schedule: ScheduleData): boolean {
+  return new Date(schedule.due) <= new Date();
+}
+
+/**
+ * Compute retrievability using the FSRS forgetting curve.
+ * For new cards (stability === 0), returns 1.0.
+ */
+export function getRetrievability(schedule: ScheduleData): number {
+  if (schedule.state === "new" || schedule.stability === 0) {
+    return 1.0;
+  }
+
+  // Reconstruct a ts-fsrs Card to use get_retrievability
+  const card: FSRSCard = {
+    due: new Date(schedule.due),
+    stability: schedule.stability,
+    difficulty: schedule.difficulty,
+    elapsed_days: 0,
+    scheduled_days: 0,
+    learning_steps: 0,
+    reps: schedule.reps,
+    lapses: schedule.lapses,
+    state: STRING_TO_STATE[schedule.state],
+    last_review: schedule.lastReview
+      ? new Date(schedule.lastReview)
+      : undefined,
+  };
+
+  return f.get_retrievability(card, new Date(), false);
 }

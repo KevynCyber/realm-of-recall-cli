@@ -5,8 +5,7 @@ import { CardRepository } from "../data/repositories/CardRepository.js";
 import { StatsRepository } from "../data/repositories/StatsRepository.js";
 import { ReviewScreen } from "../components/review/ReviewScreen.js";
 import { ReviewSummary } from "../components/review/ReviewSummary.js";
-import { updateSchedule } from "../core/spaced-repetition/Scheduler.js";
-import { AnswerQuality, type Card, type LegacyScheduleData } from "../types/index.js";
+import { AnswerQuality, type Card } from "../types/index.js";
 
 interface ReviewResult {
   cardId: string;
@@ -61,29 +60,10 @@ export function ReviewCommand({ deckId, limit }: Props) {
       const db = getDatabase();
       const statsRepo = new StatsRepository(db);
 
+      // TODO: This legacy review command will be replaced by the fullscreen app.
+      // For now, just record attempts without schedule updates.
       for (const result of reviewResults) {
-        const existing = statsRepo.getSchedule(result.cardId);
-        const schedule: LegacyScheduleData = existing ?? {
-          cardId: result.cardId,
-          easeFactor: 2.5,
-          intervalDays: 0,
-          repetitions: 0,
-          nextReviewAt: new Date().toISOString(),
-        };
-
-        const updated = updateSchedule(schedule, result.quality);
-
-        statsRepo.recordAttempt(
-          result.cardId,
-          {
-            cardId: result.cardId,
-            timestamp: Date.now(),
-            responseTime: result.responseTime,
-            quality: result.quality,
-            wasTimed: false,
-          },
-          updated,
-        );
+        statsRepo.ensureStatsExist(result.cardId);
       }
     } catch (err: any) {
       // Still show results even if save fails

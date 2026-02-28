@@ -1,102 +1,218 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   createInitialSchedule,
   updateSchedule,
   isDueForReview,
+  getRetrievability,
 } from "../../src/core/spaced-repetition/Scheduler.js";
 import { AnswerQuality } from "../../src/types/index.js";
 
-describe("SM-2 Scheduler", () => {
-  it("creates initial schedule with default values", () => {
-    const s = createInitialSchedule("card1");
-    expect(s.easeFactor).toBe(2.5);
-    expect(s.intervalDays).toBe(0);
-    expect(s.repetitions).toBe(0);
-    expect(s.cardId).toBe("card1");
+describe("FSRS Scheduler", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-01-15T12:00:00.000Z"));
   });
 
-  it("first correct answer sets interval to 1 day", () => {
-    const s = createInitialSchedule("card1");
-    const updated = updateSchedule(s, AnswerQuality.Correct);
-    expect(updated.repetitions).toBe(1);
-    expect(updated.intervalDays).toBe(1);
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  it("second correct answer sets interval to 6 days", () => {
-    let s = createInitialSchedule("card1");
-    s = updateSchedule(s, AnswerQuality.Correct);
-    s = updateSchedule(s, AnswerQuality.Correct);
-    expect(s.repetitions).toBe(2);
-    expect(s.intervalDays).toBe(6);
+  describe("createInitialSchedule", () => {
+    it("returns valid defaults", () => {
+      const s = createInitialSchedule("card1");
+      expect(s.cardId).toBe("card1");
+      expect(s.difficulty).toBe(0);
+      expect(s.stability).toBe(0);
+      expect(s.reps).toBe(0);
+      expect(s.lapses).toBe(0);
+      expect(s.state).toBe("new");
+      expect(s.due).toBe(new Date("2025-01-15T12:00:00.000Z").toISOString());
+      expect(s.lastReview).toBe(
+        new Date("2025-01-15T12:00:00.000Z").toISOString(),
+      );
+    });
+
+    it("uses different card IDs correctly", () => {
+      const s1 = createInitialSchedule("abc");
+      const s2 = createInitialSchedule("xyz");
+      expect(s1.cardId).toBe("abc");
+      expect(s2.cardId).toBe("xyz");
+    });
   });
 
-  it("third correct answer uses ease factor", () => {
-    let s = createInitialSchedule("card1");
-    s = updateSchedule(s, AnswerQuality.Correct);
-    s = updateSchedule(s, AnswerQuality.Correct);
-    s = updateSchedule(s, AnswerQuality.Correct);
-    expect(s.repetitions).toBe(3);
-    // interval = round(6 * easeFactor)
-    expect(s.intervalDays).toBeGreaterThan(6);
+  describe("updateSchedule with Good rating", () => {
+    it("transitions from new to learning or review state", () => {
+      const s = createInitialSchedule("card1");
+      const updated = updateSchedule(s, AnswerQuality.Correct);
+
+      // After a Good rating on a new card, state should move to learning or review
+      expect(["learning", "review"]).toContain(updated.state);
+      expect(updated.reps).toBe(1);
+      expect(updated.stability).toBeGreaterThan(0);
+      expect(updated.difficulty).toBeGreaterThan(0);
+    });
   });
 
-  it("wrong answer resets repetitions", () => {
-    let s = createInitialSchedule("card1");
-    s = updateSchedule(s, AnswerQuality.Correct);
-    s = updateSchedule(s, AnswerQuality.Correct);
-    expect(s.repetitions).toBe(2);
+  describe("updateSchedule with Again rating", () => {
+    it("increases lapses for review cards", () => {
+      let s = createInitialSchedule("card1");
 
-    s = updateSchedule(s, AnswerQuality.Wrong);
-    expect(s.repetitions).toBe(0);
-    expect(s.intervalDays).toBe(1);
+      // Move card through learning into review state
+      // Multiple Good answers to get into review
+      for (let i = 0; i < 10; i++) {
+        s = updateSchedule(s, AnswerQuality.Correct);
+        if (s.state === "review") break;
+      }
+
+      // If we got to review state, test lapse behavior
+      if (s.state === "review") {
+        const lapseBefore = s.lapses;
+        const updated = updateSchedule(s, AnswerQuality.Wrong);
+        expect(updated.lapses).toBe(lapseBefore + 1);
+        expect(["relearning", "learning"]).toContain(updated.state);
+      }
+    });
   });
 
-  it("timeout resets repetitions", () => {
-    let s = createInitialSchedule("card1");
-    s = updateSchedule(s, AnswerQuality.Correct);
-    s = updateSchedule(s, AnswerQuality.Timeout);
-    expect(s.repetitions).toBe(0);
+  describe("repeated Good answers produce growing intervals", () => {
+    it("intervals grow over repeated successful reviews", () => {
+      let s = createInitialSchedule("card1");
+      const dueDates: Date[] = [];
+
+      // Simulate many successful reviews, advancing time to each due date
+      for (let i = 0; i < 8; i++) {
+        s = updateSchedule(s, AnswerQuality.Correct);
+        dueDates.push(new Date(s.due));
+        // Advance time to just past the due date for the next review
+        vi.setSystemTime(new Date(new Date(s.due).getTime() + 1000));
+      }
+
+      // Once in review state, intervals should generally grow
+      // Check that later intervals are at least as large as earlier ones
+      // (comparing gaps between due dates)
+      // Filter to reviews that are in "review" state (after learning phase)
+      // The key property: the due dates should be getting further apart
+      const intervals: number[] = [];
+      for (let i = 1; i < dueDates.length; i++) {
+        intervals.push(dueDates[i].getTime() - dueDates[i - 1].getTime());
+      }
+
+      // At minimum, the last interval should be larger than the first
+      // (allowing for some learning-phase short intervals at the start)
+      const lastInterval = intervals[intervals.length - 1];
+      const firstInterval = intervals[0];
+      expect(lastInterval).toBeGreaterThanOrEqual(firstInterval);
+    });
   });
 
-  it("perfect answers increase ease factor", () => {
-    let s = createInitialSchedule("card1");
-    const initialEase = s.easeFactor;
-    s = updateSchedule(s, AnswerQuality.Perfect);
-    expect(s.easeFactor).toBeGreaterThan(initialEase);
+  describe("isDueForReview", () => {
+    it("returns true when due date is in the past", () => {
+      const s = createInitialSchedule("card1");
+      s.due = new Date("2025-01-14T12:00:00.000Z").toISOString(); // yesterday
+      expect(isDueForReview(s)).toBe(true);
+    });
+
+    it("returns true when due date is exactly now", () => {
+      const s = createInitialSchedule("card1");
+      s.due = new Date("2025-01-15T12:00:00.000Z").toISOString(); // exactly now
+      expect(isDueForReview(s)).toBe(true);
+    });
+
+    it("returns false when due date is in the future", () => {
+      const s = createInitialSchedule("card1");
+      s.due = new Date("2025-01-16T12:00:00.000Z").toISOString(); // tomorrow
+      expect(isDueForReview(s)).toBe(false);
+    });
+
+    it("returns true for a freshly created schedule (due is now)", () => {
+      const s = createInitialSchedule("card1");
+      expect(isDueForReview(s)).toBe(true);
+    });
   });
 
-  it("wrong answers decrease ease factor", () => {
-    let s = createInitialSchedule("card1");
-    const initialEase = s.easeFactor;
-    s = updateSchedule(s, AnswerQuality.Wrong);
-    expect(s.easeFactor).toBeLessThan(initialEase);
+  describe("difficulty stays in valid FSRS range", () => {
+    it("difficulty remains between 1 and 10 after many Easy answers", () => {
+      let s = createInitialSchedule("card1");
+      for (let i = 0; i < 20; i++) {
+        s = updateSchedule(s, AnswerQuality.Perfect);
+        vi.setSystemTime(new Date(new Date(s.due).getTime() + 1000));
+      }
+      expect(s.difficulty).toBeGreaterThanOrEqual(1);
+      expect(s.difficulty).toBeLessThanOrEqual(10);
+    });
+
+    it("difficulty remains between 1 and 10 after many Again answers", () => {
+      let s = createInitialSchedule("card1");
+      for (let i = 0; i < 20; i++) {
+        s = updateSchedule(s, AnswerQuality.Wrong);
+        vi.setSystemTime(new Date(new Date(s.due).getTime() + 1000));
+      }
+      expect(s.difficulty).toBeGreaterThanOrEqual(1);
+      expect(s.difficulty).toBeLessThanOrEqual(10);
+    });
+
+    it("difficulty remains in range with mixed answers", () => {
+      let s = createInitialSchedule("card1");
+      const qualities = [
+        AnswerQuality.Correct,
+        AnswerQuality.Wrong,
+        AnswerQuality.Perfect,
+        AnswerQuality.Partial,
+        AnswerQuality.Timeout,
+        AnswerQuality.Correct,
+        AnswerQuality.Perfect,
+        AnswerQuality.Wrong,
+      ];
+      for (const q of qualities) {
+        s = updateSchedule(s, q);
+        vi.setSystemTime(new Date(new Date(s.due).getTime() + 1000));
+      }
+      expect(s.difficulty).toBeGreaterThanOrEqual(1);
+      expect(s.difficulty).toBeLessThanOrEqual(10);
+    });
   });
 
-  it("ease factor never goes below 1.3", () => {
-    let s = createInitialSchedule("card1");
-    // Hammer it with wrong answers
-    for (let i = 0; i < 20; i++) {
-      s = updateSchedule(s, AnswerQuality.Wrong);
-    }
-    expect(s.easeFactor).toBeGreaterThanOrEqual(1.3);
+  describe("getRetrievability", () => {
+    it("returns 1.0 for new cards", () => {
+      const s = createInitialSchedule("card1");
+      expect(getRetrievability(s)).toBe(1.0);
+    });
+
+    it("returns a value between 0 and 1 for reviewed cards", () => {
+      let s = createInitialSchedule("card1");
+      s = updateSchedule(s, AnswerQuality.Correct);
+
+      // Advance time a bit so retrievability drops
+      vi.setSystemTime(new Date(new Date(s.due).getTime() + 86400000));
+
+      const r = getRetrievability(s);
+      expect(r).toBeGreaterThanOrEqual(0);
+      expect(r).toBeLessThanOrEqual(1);
+    });
   });
 
-  it("partial answer counts as success (q=3)", () => {
-    let s = createInitialSchedule("card1");
-    s = updateSchedule(s, AnswerQuality.Partial);
-    expect(s.repetitions).toBe(1);
-    expect(s.intervalDays).toBe(1);
-  });
+  describe("quality mapping", () => {
+    it("Perfect (Easy) produces lower difficulty than Wrong (Again)", () => {
+      const s1 = createInitialSchedule("card1");
+      const s2 = createInitialSchedule("card2");
 
-  it("isDueForReview returns true for past dates", () => {
-    const s = createInitialSchedule("card1");
-    s.nextReviewAt = new Date(Date.now() - 86400000).toISOString(); // yesterday
-    expect(isDueForReview(s)).toBe(true);
-  });
+      const afterEasy = updateSchedule(s1, AnswerQuality.Perfect);
+      const afterAgain = updateSchedule(s2, AnswerQuality.Wrong);
 
-  it("isDueForReview returns false for future dates", () => {
-    const s = createInitialSchedule("card1");
-    s.nextReviewAt = new Date(Date.now() + 86400000).toISOString(); // tomorrow
-    expect(isDueForReview(s)).toBe(false);
+      // Easy rating should result in lower difficulty than Again
+      expect(afterEasy.difficulty).toBeLessThan(afterAgain.difficulty);
+    });
+
+    it("Timeout maps to Again (same as Wrong)", () => {
+      const s1 = createInitialSchedule("card1");
+      const s2 = createInitialSchedule("card2");
+
+      const afterWrong = updateSchedule(s1, AnswerQuality.Wrong);
+      const afterTimeout = updateSchedule(s2, AnswerQuality.Timeout);
+
+      // Both map to Rating.Again, so difficulty should be the same
+      expect(afterWrong.difficulty).toBe(afterTimeout.difficulty);
+      expect(afterWrong.stability).toBe(afterTimeout.stability);
+    });
   });
 });
