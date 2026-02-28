@@ -5,3 +5,4 @@ dist/
 decks/*
 coverage/
 .claude/
+.ralph/

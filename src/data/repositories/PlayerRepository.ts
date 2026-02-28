@@ -30,6 +30,12 @@ export class PlayerRepository {
       combatWins: row.combat_wins,
       combatLosses: row.combat_losses,
       wisdomXp: row.wisdom_xp ?? 0,
+      ascensionLevel: row.ascension_level ?? 0,
+      skillPoints: row.skill_points ?? 0,
+      dailyChallengeSeed: row.daily_challenge_seed ?? null,
+      dailyChallengeCompleted: !!(row.daily_challenge_completed ?? 0),
+      dailyChallengeScore: row.daily_challenge_score ?? 0,
+      dailyChallengeDate: row.daily_challenge_date ?? null,
       createdAt: row.created_at,
     };
   }
@@ -39,8 +45,10 @@ export class PlayerRepository {
       .prepare(
         `INSERT INTO player (id, name, class, level, xp, hp, max_hp, attack, defense, gold,
           streak_days, longest_streak, last_review_date, shield_count,
-          total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp,
+          ascension_level, skill_points, daily_challenge_seed, daily_challenge_completed,
+          daily_challenge_score, daily_challenge_date, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         player.id,
@@ -62,6 +70,12 @@ export class PlayerRepository {
         player.combatWins,
         player.combatLosses,
         player.wisdomXp,
+        player.ascensionLevel,
+        player.skillPoints,
+        player.dailyChallengeSeed,
+        player.dailyChallengeCompleted ? 1 : 0,
+        player.dailyChallengeScore,
+        player.dailyChallengeDate,
         player.createdAt,
       );
   }
@@ -73,7 +87,9 @@ export class PlayerRepository {
           name = ?, class = ?, level = ?, xp = ?, hp = ?, max_hp = ?,
           attack = ?, defense = ?, gold = ?, streak_days = ?, longest_streak = ?,
           last_review_date = ?, shield_count = ?, total_reviews = ?, total_correct = ?,
-          combat_wins = ?, combat_losses = ?, wisdom_xp = ?, created_at = ?
+          combat_wins = ?, combat_losses = ?, wisdom_xp = ?, ascension_level = ?,
+          skill_points = ?, daily_challenge_seed = ?, daily_challenge_completed = ?,
+          daily_challenge_score = ?, daily_challenge_date = ?, created_at = ?
          WHERE id = 1`,
       )
       .run(
@@ -95,6 +111,12 @@ export class PlayerRepository {
         player.combatWins,
         player.combatLosses,
         player.wisdomXp,
+        player.ascensionLevel,
+        player.skillPoints,
+        player.dailyChallengeSeed,
+        player.dailyChallengeCompleted ? 1 : 0,
+        player.dailyChallengeScore,
+        player.dailyChallengeDate,
         player.createdAt,
       );
   }

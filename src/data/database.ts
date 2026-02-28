@@ -205,4 +205,30 @@ const migrations = [
       CREATE INDEX idx_reflections_date ON session_reflections(created_at);
     `,
   },
+  {
+    name: "005_perfect_game",
+    sql: `
+      CREATE TABLE achievements (
+        id TEXT PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        unlocked_at TEXT
+      );
+
+      ALTER TABLE player ADD COLUMN ascension_level INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_points INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_seed TEXT;
+      ALTER TABLE player ADD COLUMN daily_challenge_completed INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_score INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_date TEXT;
+
+      CREATE TABLE random_events (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `,
+  },
 ];
