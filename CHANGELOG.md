@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.1] - 2026-02-28
+
+### Added
+
+- 122 UI component tests across 6 test files using ink-testing-library
+  - `common.test.tsx` — ProgressBar (7 tests), SelectMenu (7 tests)
+  - `combat.test.tsx` — DamageNumber, EnemyDisplay, CombatLog, LootDrop (21 tests)
+  - `review.test.tsx` — FlashcardFace, ReviewSummary (14 tests)
+  - `app.test.tsx` — ThemeProvider, Header, StatusBar (13 tests)
+  - `screens.test.tsx` — HubScreen, StatsScreen, MapScreen, DeckScreen, InventoryScreen (44 tests)
+  - `title-screen.test.tsx` — TitleScreen full flow (16 tests)
+- Vitest config updated to include `.tsx` test files
+- Overall test coverage raised from 42% to 67% (329 total tests)
+
 ## [0.3.0] - 2026-02-28
 
 ### Added

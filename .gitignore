@@ -3,4 +3,5 @@ dist/
 *.db
 .env
 decks/*
+coverage/
 .claude/
