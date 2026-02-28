@@ -1,15 +1,51 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { ThemeProvider } from "./ThemeProvider.js";
 import { Header } from "./Header.js";
 import { StatusBar } from "./StatusBar.js";
-import type { Player } from "../../types/index.js";
+import { TitleScreen } from "../screens/TitleScreen.js";
+import { HubScreen } from "../screens/HubScreen.js";
+import { CombatScreen } from "../screens/CombatScreen.js";
+import { InventoryScreen } from "../screens/InventoryScreen.js";
+import { MapScreen } from "../screens/MapScreen.js";
+import { StatsScreen } from "../screens/StatsScreen.js";
+import { ReviewScreen } from "../review/ReviewScreen.js";
+import { ReviewSummary } from "../review/ReviewSummary.js";
+import { getDatabase } from "../../data/database.js";
+import { PlayerRepository } from "../../data/repositories/PlayerRepository.js";
+import { CardRepository } from "../../data/repositories/CardRepository.js";
+import { StatsRepository } from "../../data/repositories/StatsRepository.js";
+import { EquipmentRepository } from "../../data/repositories/EquipmentRepository.js";
+import { ZoneRepository } from "../../data/repositories/ZoneRepository.js";
+import { createNewPlayer } from "../../core/player/PlayerStats.js";
+import { generateEnemy } from "../../core/combat/EnemyGenerator.js";
+import {
+  updateSchedule,
+  createInitialSchedule,
+} from "../../core/spaced-repetition/Scheduler.js";
+import { applyLevelUp } from "../../core/progression/LevelSystem.js";
+import {
+  updateStreak,
+  getStreakBonus,
+  isStreakAtRisk,
+} from "../../core/progression/StreakTracker.js";
+import type {
+  Player,
+  Equipment,
+  Card,
+  Zone,
+  ScheduleData,
+} from "../../types/index.js";
+import { AnswerQuality, PlayerClass } from "../../types/index.js";
+import type { CombatResult } from "../../types/combat.js";
+import type { Enemy } from "../../types/combat.js";
 
 export type Screen =
   | "title"
   | "hub"
   | "combat"
   | "review"
+  | "review_summary"
   | "inventory"
   | "map"
   | "stats";
@@ -28,66 +64,583 @@ export function useNavigation(): NavigationContextValue {
   return React.useContext(NavigationContext);
 }
 
+function getTodayUTC(): string {
+  const d = new Date();
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
 export default function App() {
   const { exit } = useApp();
   const [screen, setScreen] = useState<Screen>("title");
   const [player, setPlayer] = useState<Player | null>(null);
   const [cardsDue, setCardsDue] = useState(0);
 
-  const navigate = useCallback((target: Screen) => {
-    setScreen(target);
+  // Screen-specific data
+  const [combatCards, setCombatCards] = useState<Card[]>([]);
+  const [combatEnemy, setCombatEnemy] = useState<Enemy | null>(null);
+  const [equippedItems, setEquippedItems] = useState<Equipment[]>([]);
+  const [inventoryData, setInventoryData] = useState<
+    Array<{ equipment: Equipment; equipped: boolean; inventoryId: number }>
+  >([]);
+  const [zoneData, setZoneData] = useState<
+    Array<{
+      zone: Zone;
+      total: number;
+      mastered: number;
+      masteryPct: number;
+      isUnlocked: boolean;
+    }>
+  >([]);
+  const [deckStats, setDeckStats] = useState<
+    Array<{ name: string; total: number; mastered: number; accuracy: number }>
+  >([]);
+  const [fsrsStats, setFsrsStats] = useState({
+    newCount: 0,
+    learningCount: 0,
+    reviewCount: 0,
+    relearnCount: 0,
+  });
+  const [reviewResults, setReviewResults] = useState<
+    Array<{ cardId: string; quality: AnswerQuality; responseTime: number }>
+  >([]);
+  const [reviewXp, setReviewXp] = useState(0);
+  const [leveledUp, setLeveledUp] = useState(false);
+  const [newLevel, setNewLevel] = useState(0);
+
+  const refreshCardsDue = useCallback(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const dueIds = statsRepo.getDueCards(undefined, 9999);
+      setCardsDue(dueIds.length);
+    } catch {
+      // ignore
+    }
   }, []);
 
-  useInput((input, key) => {
-    if (screen === "title") return;
+  const reloadPlayer = useCallback(() => {
+    try {
+      const db = getDatabase();
+      const playerRepo = new PlayerRepository(db);
+      const p = playerRepo.getPlayer();
+      if (p) setPlayer(p);
+    } catch {
+      // ignore
+    }
+  }, []);
 
+  // Load player on mount
+  useEffect(() => {
+    try {
+      const db = getDatabase();
+      const playerRepo = new PlayerRepository(db);
+      const p = playerRepo.getPlayer();
+      if (p) {
+        setPlayer(p);
+        setScreen("hub");
+        const statsRepo = new StatsRepository(db);
+        const dueIds = statsRepo.getDueCards(undefined, 9999);
+        setCardsDue(dueIds.length);
+      }
+    } catch {
+      // ignore — show title screen
+    }
+  }, []);
+
+  const handleCreatePlayer = useCallback(
+    (name: string, playerClass: PlayerClass) => {
+      try {
+        const db = getDatabase();
+        const playerRepo = new PlayerRepository(db);
+        const p = createNewPlayer(name, playerClass);
+        playerRepo.createPlayer(p);
+        setPlayer(p);
+        refreshCardsDue();
+        setScreen("hub");
+      } catch (err: any) {
+        console.error("Failed to create player:", err.message);
+      }
+    },
+    [refreshCardsDue],
+  );
+
+  const prepareCombat = useCallback(
+    (deckId?: string) => {
+      if (!player) return false;
+      try {
+        const db = getDatabase();
+        const cardRepo = new CardRepository(db);
+        const statsRepo = new StatsRepository(db);
+        const equipRepo = new EquipmentRepository(db);
+
+        const dueIds = statsRepo.getDueCards(deckId, 10);
+        const cards = dueIds
+          .map((id) => cardRepo.getCard(id))
+          .filter((c): c is Card => c !== undefined);
+        if (cards.length === 0) return false;
+
+        const enemy = generateEnemy(5, player.level);
+        const equipped = equipRepo.getEquipped();
+        setCombatCards(cards);
+        setCombatEnemy(enemy);
+        setEquippedItems(equipped);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [player],
+  );
+
+  const navigateToScreen = useCallback(
+    (target: string) => {
+      switch (target) {
+        case "combat": {
+          if (prepareCombat()) {
+            setScreen("combat");
+          }
+          break;
+        }
+        case "review": {
+          try {
+            const db = getDatabase();
+            const cardRepo = new CardRepository(db);
+            const statsRepo = new StatsRepository(db);
+            const dueIds = statsRepo.getDueCards(undefined, 20);
+            const cards = dueIds
+              .map((id) => cardRepo.getCard(id))
+              .filter((c): c is Card => c !== undefined);
+            if (cards.length === 0) break;
+            setCombatCards(cards);
+            setReviewResults([]);
+            setScreen("review");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "inventory": {
+          try {
+            const db = getDatabase();
+            const equipRepo = new EquipmentRepository(db);
+            setEquippedItems(equipRepo.getEquipped());
+            setInventoryData(
+              equipRepo.getInventory() as Array<{
+                equipment: Equipment;
+                equipped: boolean;
+                inventoryId: number;
+              }>,
+            );
+            setScreen("inventory");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "map": {
+          try {
+            const db = getDatabase();
+            const statsRepo = new StatsRepository(db);
+            const zoneRepo = new ZoneRepository(db);
+            const zones = zoneRepo.getZones();
+            const zoneInfos = zones.map((zone, index) => {
+              const mastery = statsRepo.getDeckMasteryStats(zone.deckId);
+              const masteredCount = mastery.reviewCount;
+              const total = mastery.total;
+              const masteryPct = total > 0 ? masteredCount / total : 0;
+              const isUnlocked =
+                index === 0 || (index > 0 && zones[index - 1].bossDefeated);
+              return {
+                zone,
+                total,
+                mastered: masteredCount,
+                masteryPct,
+                isUnlocked,
+              };
+            });
+            setZoneData(zoneInfos);
+            setScreen("map");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "stats": {
+          if (!player) break;
+          try {
+            const db = getDatabase();
+            const cardRepo = new CardRepository(db);
+            const statsRepo = new StatsRepository(db);
+            const decks = cardRepo.getAllDecks();
+            const ds = decks.map((deck) => {
+              const mastery = statsRepo.getDeckMasteryStats(deck.id);
+              return {
+                name: deck.name,
+                total: mastery.total,
+                mastered: mastery.reviewCount,
+                accuracy:
+                  player.totalReviews > 0
+                    ? Math.round(
+                        (player.totalCorrect / player.totalReviews) * 100,
+                      )
+                    : 0,
+              };
+            });
+            let agg = {
+              newCount: 0,
+              learningCount: 0,
+              reviewCount: 0,
+              relearnCount: 0,
+            };
+            for (const deck of decks) {
+              const m = statsRepo.getDeckMasteryStats(deck.id);
+              agg.newCount += m.newCount;
+              agg.learningCount += m.learningCount;
+              agg.reviewCount += m.reviewCount;
+              agg.relearnCount += m.relearnCount;
+            }
+            setDeckStats(ds);
+            setFsrsStats(agg);
+            setScreen("stats");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "import": {
+          // Import is CLI-only (ror import <file>)
+          break;
+        }
+        default:
+          setScreen(target as Screen);
+      }
+    },
+    [player, prepareCombat],
+  );
+
+  const handleCombatComplete = useCallback(
+    (result: CombatResult) => {
+      if (!player) return;
+      try {
+        const db = getDatabase();
+        const playerRepo = new PlayerRepository(db);
+        const statsRepo = new StatsRepository(db);
+        const equipRepo = new EquipmentRepository(db);
+
+        // Update streak
+        const today = getTodayUTC();
+        let updated = updateStreak(player, today);
+
+        // Update combat record
+        updated = {
+          ...updated,
+          combatWins: updated.combatWins + (result.victory ? 1 : 0),
+          combatLosses: updated.combatLosses + (result.victory ? 0 : 1),
+          xp: updated.xp + result.xpEarned,
+          gold: updated.gold + result.goldEarned,
+          totalReviews: updated.totalReviews + result.cardsReviewed,
+          totalCorrect:
+            updated.totalCorrect + result.perfectCount + result.correctCount,
+        };
+
+        // Apply level ups
+        updated = applyLevelUp(updated);
+
+        playerRepo.updatePlayer(updated);
+        setPlayer(updated);
+
+        // Save loot
+        if (result.loot) {
+          equipRepo.addEquipment(result.loot);
+          equipRepo.addToInventory(result.loot.id);
+        }
+
+        // Update FSRS schedules for reviewed cards
+        const quality = result.victory
+          ? AnswerQuality.Correct
+          : AnswerQuality.Wrong;
+        for (const card of combatCards.slice(0, result.cardsReviewed)) {
+          let schedule = statsRepo.getSchedule(card.id);
+          if (!schedule) {
+            schedule = createInitialSchedule(card.id);
+          }
+          const updatedSchedule = updateSchedule(schedule, quality);
+          statsRepo.recordAttempt(
+            card.id,
+            {
+              cardId: card.id,
+              timestamp: Date.now(),
+              responseTime: 0,
+              quality,
+              wasTimed: false,
+            },
+            updatedSchedule,
+          );
+        }
+
+        refreshCardsDue();
+        setScreen("hub");
+      } catch (err: any) {
+        console.error("Error saving combat results:", err.message);
+        setScreen("hub");
+      }
+    },
+    [player, combatCards, refreshCardsDue],
+  );
+
+  const handleReviewComplete = useCallback(
+    (
+      results: Array<{
+        cardId: string;
+        quality: AnswerQuality;
+        responseTime: number;
+      }>,
+    ) => {
+      if (!player) return;
+      try {
+        const db = getDatabase();
+        const playerRepo = new PlayerRepository(db);
+        const statsRepo = new StatsRepository(db);
+
+        // Update streak
+        const today = getTodayUTC();
+        let updated = updateStreak(player, today);
+
+        // Count correct answers
+        const correctCount = results.filter(
+          (r) =>
+            r.quality === AnswerQuality.Perfect ||
+            r.quality === AnswerQuality.Correct ||
+            r.quality === AnswerQuality.Partial,
+        ).length;
+
+        updated = {
+          ...updated,
+          totalReviews: updated.totalReviews + results.length,
+          totalCorrect: updated.totalCorrect + correctCount,
+        };
+
+        // Update each card's FSRS schedule
+        for (const result of results) {
+          let schedule = statsRepo.getSchedule(result.cardId);
+          if (!schedule) {
+            schedule = createInitialSchedule(result.cardId);
+          }
+          const updatedSchedule = updateSchedule(schedule, result.quality);
+          statsRepo.recordAttempt(
+            result.cardId,
+            {
+              cardId: result.cardId,
+              timestamp: Date.now(),
+              responseTime: result.responseTime,
+              quality: result.quality,
+              wasTimed: false,
+            },
+            updatedSchedule,
+          );
+        }
+
+        // Award XP for reviewing
+        const xpGained = results.length * 5;
+        updated = { ...updated, xp: updated.xp + xpGained };
+
+        const prevLevel = updated.level;
+        updated = applyLevelUp(updated);
+
+        playerRepo.updatePlayer(updated);
+        setPlayer(updated);
+        setReviewResults(results);
+        setReviewXp(xpGained);
+        setLeveledUp(updated.level > prevLevel);
+        setNewLevel(updated.level);
+        refreshCardsDue();
+        setScreen("review_summary");
+      } catch (err: any) {
+        console.error("Error saving review results:", err.message);
+        setScreen("hub");
+      }
+    },
+    [player, refreshCardsDue],
+  );
+
+  const handleEquip = useCallback((inventoryId: number) => {
+    try {
+      const db = getDatabase();
+      const equipRepo = new EquipmentRepository(db);
+      equipRepo.equipItem(inventoryId);
+      setEquippedItems(equipRepo.getEquipped());
+      setInventoryData(
+        equipRepo.getInventory() as Array<{
+          equipment: Equipment;
+          equipped: boolean;
+          inventoryId: number;
+        }>,
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleUnequip = useCallback((inventoryId: number) => {
+    try {
+      const db = getDatabase();
+      const equipRepo = new EquipmentRepository(db);
+      equipRepo.unequipItem(inventoryId);
+      setEquippedItems(equipRepo.getEquipped());
+      setInventoryData(
+        equipRepo.getInventory() as Array<{
+          equipment: Equipment;
+          equipped: boolean;
+          inventoryId: number;
+        }>,
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSelectZone = useCallback(
+    (zoneId: string) => {
+      if (!player) return;
+      try {
+        const db = getDatabase();
+        const zoneRepo = new ZoneRepository(db);
+        const zone = zoneRepo.getZones().find((z) => z.id === zoneId);
+        if (!zone) return;
+        if (prepareCombat(zone.deckId)) {
+          setScreen("combat");
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [player, prepareCombat],
+  );
+
+  // Global keyboard shortcuts
+  useInput((input, key) => {
+    if (
+      screen === "title" ||
+      screen === "combat" ||
+      screen === "review"
+    )
+      return;
     if (input === "q") {
       exit();
       return;
     }
-
-    if (key.escape) {
+    if (key.return && screen === "review_summary") {
+      setScreen("hub");
+      return;
+    }
+    if (key.escape && screen !== "hub") {
       setScreen("hub");
     }
   });
 
   const terminalHeight = process.stdout.rows || 24;
+  const today = getTodayUTC();
+  const streakAtRisk = player ? isStreakAtRisk(player, today) : false;
+  const streakBonusPct = player ? getStreakBonus(player.streakDays) : 0;
 
   const renderContent = () => {
     switch (screen) {
       case "title":
-        return <Text>Screen: title</Text>;
+        return <TitleScreen onCreatePlayer={handleCreatePlayer} />;
       case "hub":
-        return <Text>Screen: hub</Text>;
+        return (
+          <HubScreen
+            cardsDue={cardsDue}
+            streakAtRisk={streakAtRisk}
+            onNavigate={navigateToScreen}
+          />
+        );
       case "combat":
-        return <Text>Screen: combat</Text>;
+        return combatEnemy && player ? (
+          <CombatScreen
+            cards={combatCards}
+            enemy={combatEnemy}
+            player={player}
+            equippedItems={equippedItems}
+            streakBonusPct={streakBonusPct}
+            onComplete={handleCombatComplete}
+          />
+        ) : (
+          <Text>Loading combat...</Text>
+        );
       case "review":
-        return <Text>Screen: review</Text>;
+        return (
+          <ReviewScreen
+            cards={combatCards}
+            onComplete={handleReviewComplete}
+          />
+        );
+      case "review_summary":
+        return (
+          <Box flexDirection="column">
+            <ReviewSummary
+              results={reviewResults}
+              xpEarned={reviewXp}
+              leveledUp={leveledUp}
+              newLevel={newLevel}
+            />
+            <Box marginTop={1} justifyContent="center">
+              <Text dimColor italic>
+                Press Enter to continue...
+              </Text>
+            </Box>
+          </Box>
+        );
       case "inventory":
-        return <Text>Screen: inventory</Text>;
+        return (
+          <InventoryScreen
+            equippedItems={equippedItems}
+            inventory={inventoryData}
+            onEquip={handleEquip}
+            onUnequip={handleUnequip}
+            onBack={() => setScreen("hub")}
+          />
+        );
       case "map":
-        return <Text>Screen: map</Text>;
+        return (
+          <MapScreen
+            zones={zoneData}
+            onSelectZone={handleSelectZone}
+            onBack={() => setScreen("hub")}
+          />
+        );
       case "stats":
-        return <Text>Screen: stats</Text>;
+        return player ? (
+          <StatsScreen
+            player={player}
+            deckStats={deckStats}
+            fsrsStats={fsrsStats}
+            onBack={() => setScreen("hub")}
+          />
+        ) : null;
       default:
-        return <Text>Screen: unknown</Text>;
+        return <Text>Unknown screen</Text>;
     }
   };
 
   return (
     <ThemeProvider>
-      <NavigationContext.Provider value={{ navigate, currentScreen: screen }}>
+      <NavigationContext.Provider
+        value={{ navigate: navigateToScreen as (screen: Screen) => void, currentScreen: screen }}
+      >
         <Box flexDirection="column" minHeight={terminalHeight}>
-          {player && (
+          {player && screen !== "title" && (
             <Header
               playerName={player.name}
               streakDays={player.streakDays}
               dayCount={player.totalReviews}
-              streakAtRisk={false}
+              streakAtRisk={streakAtRisk}
             />
           )}
           <Box flexGrow={1}>{renderContent()}</Box>
-          {player && <StatusBar player={player} cardsDue={cardsDue} />}
+          {player && screen !== "title" && (
+            <StatusBar player={player} cardsDue={cardsDue} />
+          )}
         </Box>
       </NavigationContext.Provider>
     </ThemeProvider>

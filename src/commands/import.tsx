@@ -3,6 +3,7 @@ import { Text, Box } from "ink";
 import path from "path";
 import { getDatabase } from "../data/database.js";
 import { CardRepository } from "../data/repositories/CardRepository.js";
+import { ZoneRepository } from "../data/repositories/ZoneRepository.js";
 import { importJson } from "../importers/JsonImporter.js";
 import { importCsv } from "../importers/CsvImporter.js";
 
@@ -34,6 +35,21 @@ export function ImportCommand({ filePath }: Props) {
       const repo = new CardRepository(db);
       repo.createDeck(result.deck);
       repo.insertCards(result.cards);
+
+      // Auto-create a zone for the imported deck
+      const zoneRepo = new ZoneRepository(db);
+      const existingZone = zoneRepo.getZoneByDeckId(result.deck.id);
+      if (!existingZone) {
+        const zoneCount = zoneRepo.getZones().length;
+        zoneRepo.createZone({
+          id: `zone-${result.deck.id}`,
+          name: result.deck.name,
+          deckId: result.deck.id,
+          requiredMastery: 0.7,
+          bossDefeated: false,
+          orderIndex: zoneCount,
+        });
+      }
 
       setDeckName(result.deck.name);
       setCardCount(result.cards.length);
