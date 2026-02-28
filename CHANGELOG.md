@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2026-02-28
+
+### Added
+
+- **Confidence-Based Review (F-11)**: After answering correctly, rate your confidence (Lucky Guess / Knew It / Instant Recall). Confidence affects FSRS scheduling — guessed answers get shorter intervals even when correct.
+- **Card Evolution System (F-12)**: Cards progress through 4 tiers (New → Learned → Proven → Mastered) based on consecutive correct answers and FSRS stability. Higher tiers grant combat damage multipliers (up to 2x) and crit bonuses (+25%).
+- **Interleaved Retrieval Modes (F-13)**: Cards can now be reviewed in different modes — Standard, Reversed (show answer/guess question), Teach (explain concept + self-rate), and Connect. Weighted random selection with recency penalties ensures variety.
+- **Post-Session Reflection (F-14)**: Kolb-inspired reflection after every combat and review session. Rate difficulty, optionally journal, and earn Wisdom XP (25 micro-reflection + 50 journal). RPG-themed prompts. Growth mindset reframing (CPJ) for sessions below 70% accuracy.
+- **Marginal Gains Dashboard (F-15)**: Stats screen now shows ASCII sparkline trends for accuracy and speed, with trend direction indicators and percentage changes.
+- **Wisdom XP**: New player stat tracking reflection engagement, persisted to database.
+- **Card Health Indicators**: FlashcardFace shows evolution tier visuals (stars, border styles) and health warnings for struggling/leech cards.
+- **ReflectionRepository**: Full persistence for session reflections with accuracy history for CPJ.
+- **StatsRepository extensions**: Track confidence, retrieval mode, response text in attempts. Track evolution tier and gap streak per card. Per-day accuracy and speed history queries.
+- **Migration 004_ultra_learner**: New columns on recall_attempts, recall_stats, player tables + session_reflections table.
+- 131 new tests (460 total across 26 test files)
+
 ## [0.3.1] - 2026-02-28
 
 ### Added

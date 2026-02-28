@@ -9,9 +9,14 @@ Learn anything through spaced repetition, gamified with RPG combat, progression,
 - **RPG Combat** — Answer flashcards to deal damage. Perfect answers crit, wrong answers let enemies strike back.
 - **Player Classes** — Scholar (bonus XP), Warrior (high HP/ATK), Rogue (bonus gold/crit).
 - **FSRS Scheduling** — Modern spaced repetition algorithm for optimal review timing.
+- **Confidence Rating** — Rate your confidence after correct answers (Guess/Knew/Instant) for smarter scheduling.
+- **Card Evolution** — Cards evolve through 4 tiers (New → Learned → Proven → Mastered) with combat damage bonuses.
+- **Retrieval Modes** — Standard, Reversed, Teach, and Connect modes for deeper learning.
+- **Post-Session Reflection** — Earn Wisdom XP through micro-reflections and optional journaling after sessions.
 - **Equipment & Loot** — Defeat enemies to earn gear across 4 rarities (common, uncommon, rare, epic).
 - **Streak System** — Daily study streaks with XP bonuses (up to +50% at 30 days) and shield protection.
 - **World Map** — Zone progression tied to deck mastery with boss fights.
+- **Progress Dashboard** — Sparkline trends, consistency grids, and marginal gains tracking.
 - **Fullscreen TUI** — Polished terminal interface with keyboard navigation.
 
 ## Install
@@ -74,10 +79,12 @@ Cards are scheduled using the FSRS algorithm (via ts-fsrs). Answer quality affec
 - **Partial** (substring match) — Hard rating, shorter interval
 - **Wrong** / **Timeout** — Again rating, relearn
 
+Confidence ratings further adjust scheduling: a "Lucky Guess" correct answer gets a shorter interval than an "Instant Recall" correct answer.
+
 ## Development
 
 ```bash
-npm test          # Run tests (207 tests)
+npm test          # Run tests (460 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```

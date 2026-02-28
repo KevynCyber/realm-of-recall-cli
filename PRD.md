@@ -1,475 +1,344 @@
 # Realm of Recall CLI — Product Requirements Document
 
-**Version**: 0.2.0 — The Gamification Overhaul
+**Version**: 0.4.0 — The Ultra-Learner Update
 **Date**: 2026-02-28
+**Source**: iCanStudy Academic Program v2 — "The Ultra-Learner's Playbook"
 
 ## Executive Summary
 
-Transform Realm of Recall from a basic flashcard reviewer (v0.1.0) into a fully gamified CLI RPG where learning is powered by combat, progression, and strategic choice. The terminal experience should feel polished and immersive — inspired by the TUI quality of opencode and claude-code, but applied to an RPG game loop.
+v0.4.0 integrates evidence-based learning science from the iCanStudy Academic Program into Realm of Recall's existing RPG mechanics. Five new features add depth to the learning loop: confidence-based assessment, card evolution, interleaved retrieval modes, post-battle reflection, and marginal gains tracking. Each maps to an RPG mechanic that makes the game more engaging while genuinely improving learning outcomes.
 
 ---
 
-## Architecture Decisions
+## Architecture Decisions (v0.4.0)
 
-### AD-1: Stay on Ink v5 / React 18
+### AD-8: Confidence Maps to FSRS Ratings
 
-**Decision**: Remain on Ink v5 with React 18.
-**Rationale**: Ink v6 requires React 19 and Node 20. Staying on v5 keeps the project accessible on Node 18+ and avoids reconciler compatibility risks. The Ink v5 API is sufficient for a polished fullscreen experience.
+**Decision**: Confidence level modifies the FSRS rating, not stored as a separate scheduling dimension.
+**Rationale**: FSRS was designed for exactly this: `Guess → Hard`, `Knew → Good`, `Instant → Easy`. This is the simplest correct approach — no need for a second scheduler or custom algorithm. Knowledge gaps (correct + low confidence) naturally get shorter intervals through Hard rating.
 
-### AD-2: FSRS Replaces SM-2
+### AD-9: Evolution Parallel to FSRS
 
-**Decision**: Replace the SM-2 scheduler with FSRS via `ts-fsrs`.
-**Rationale**: FSRS outperforms SM-2 in 91.9% of cases, requiring 20-30% fewer reviews for the same retention level. The `ts-fsrs` package is production-ready, supports ESM, and targets Node 18+. The existing SM-2 code is removed (not kept as fallback — simplicity over choice).
+**Decision**: Card evolution tiers read from FSRS data (stability, lapses, state) but don't write back to the scheduling algorithm.
+**Rationale**: Evolution is a gamification layer that provides combat bonuses. Keeping it separate from FSRS means the scientifically-validated scheduling is never distorted by game mechanics. Evolution tier is stored as a simple integer on `recall_stats`.
 
-### AD-3: Fullscreen Alternate Screen Buffer
+### AD-10: Self-Rating for Teach/Connect Modes
 
-**Decision**: Use `fullscreen-ink` for the main game interface.
-**Rationale**: RPG immersion requires owning the terminal. Alternate screen buffer (like vim/htop) lets us build a persistent layout with header, content area, and status bar. On exit, the original terminal state is restored cleanly.
+**Decision**: No NLP auto-grading for Teach and Connect modes. Users self-rate their explanations.
+**Rationale**: Self-rating IS the learning exercise (metacognitive monitoring). Research shows metacognitive calibration is itself a trainable, valuable skill. This is both simpler to implement and pedagogically superior to auto-grading.
 
-### AD-4: State Machine Screen Navigation
+### AD-11: Reflection Is Optional
 
-**Decision**: Navigate between screens via a simple `useState<Screen>` state machine — no router library.
-**Rationale**: An RPG has a fixed set of screens (title, hub, combat, review, inventory, map). A switch statement on screen state is simpler and more debuggable than a routing library.
-
-### AD-5: useReducer for Game State
-
-**Decision**: Use `useReducer` with a pure reducer function for all game state mutations.
-**Rationale**: Combat involves complex state transitions (HP changes, turn progression, loot calculation). A reducer keeps mutations pure and testable. The reducer function lives in `src/core/` and can be unit-tested without Ink.
-
-### AD-6: SQLite for All Persistence
-
-**Decision**: Continue using better-sqlite3 for all game data.
-**Rationale**: Single-file database, zero network dependency, synchronous API (no async overhead in a CLI). New tables added via the existing migration system.
-
-### AD-7: @inkjs/ui for UI Components
-
-**Decision**: Use `@inkjs/ui` v2 as the primary component library. Remove standalone `ink-text-input`.
-**Rationale**: `@inkjs/ui` provides TextInput, Select, Spinner, ProgressBar, and a theming system — all from one maintained package.
+**Decision**: Micro-reflection is always shown but can be dismissed instantly. Journal prompts appear 30% of the time and can be skipped with Esc.
+**Rationale**: Forced journaling breeds resentment. Only incentivize with small XP bonus. The micro-reflection (single keystroke) is low enough friction to show every time.
 
 ---
 
-## Feature Specifications
+## Feature F-11: Confidence Rating System
 
-### F-1: Fullscreen TUI Shell
+**Learning science**: Confidence-based assessment detects knowledge gaps (correct but uncertain) and misconceptions (wrong but confident). A lucky guess is still a gap.
 
-The main game interface uses fullscreen mode with a persistent layout:
+**RPG mechanic**: After answering correctly, rate confidence. Affects FSRS scheduling AND combat damage.
 
-```
-┌─────────────────────────────────────────────────┐
-│  Realm of Recall    Day 14    Streak: 7 days    │  ← Header
-├─────────────────────────────────────────────────┤
-│                                                  │
-│  [Screen-specific content]                       │  ← Content (flexGrow)
-│  - Combat arena                                  │
-│  - Card review                                   │
-│  - Hub menu                                      │
-│  - Inventory grid                                │
-│  - Zone map                                      │
-│                                                  │
-├─────────────────────────────────────────────────┤
-│  Lv.5 Scholar  HP ████████░░ 80/100  XP 450/500 │  ← Status bar
-│  Gold: 340  Cards Due: 15   [h]Help [q]Quit     │
-└─────────────────────────────────────────────────┘
-```
+### Specification
 
-**Key patterns:**
-- `fullscreen-ink` for alternate screen buffer
-- `<Box flexDirection="column">` with header (fixed), content (`flexGrow={1}`), footer (fixed)
-- Keyboard shortcuts displayed contextually per screen
-- Color theme via React context: damage (red), healing (green), XP (magenta), gold (yellow), rare (cyan)
+**New enum — `ConfidenceLevel`**:
+- `Guess` — "Lucky guess" (correct but uncertain)
+- `Knew` — "Knew it" (normal confidence)
+- `Instant` — "Instant recall" (total certainty)
 
-### F-2: Player System
+**Combined mapping (replaces simple `QUALITY_TO_RATING`)**:
 
-On first launch, the player creates a character:
-- Choose a name
-- Choose a class: **Scholar**, **Warrior**, **Rogue**
+| Answer Quality | Confidence | FSRS Rating | Combat Damage |
+|---|---|---|---|
+| Perfect | Instant | Easy | 2.5x (crit possible) |
+| Perfect | Knew | Good | 2.0x |
+| Perfect | Guess | Hard | 1.0x (knowledge gap) |
+| Correct | Instant | Easy | 1.5x |
+| Correct | Knew | Good | 1.0x |
+| Correct | Guess | Hard | 0.5x (knowledge gap) |
+| Partial | any | Hard | 0.5x |
+| Wrong | any | Again | Enemy attacks |
+| Timeout | any | Again | Enemy attacks + poison |
 
-**Player stats** (stored in SQLite):
+**UX flow**: After correct/perfect answer, single keystroke prompt `[1] Lucky guess [2] Knew it [3] Instant recall`. Wrong/timeout answers skip the prompt.
 
-| Stat | Base | Scholar | Warrior | Rogue |
-|------|------|---------|---------|-------|
-| Max HP | 100 | 80 | 120 | 100 |
-| Attack | 10 | 8 | 14 | 11 |
-| Defense | 5 | 4 | 7 | 5 |
-| XP Bonus | 0% | +20% | 0% | 0% |
-| Gold Bonus | 0% | 0% | 0% | +25% |
-| Crit Chance | 5% | 5% | 8% | 12% |
+**Knowledge gap tracking**: Cards with 3+ consecutive `Guess` ratings are flagged as knowledge gaps, get priority in scheduling.
 
-**Leveling**: `XP_to_next = floor(100 * level^1.5)`. Each level grants +5 max HP, +2 attack, +1 defense. Every 5th level is a "milestone" with a bonus skill point.
-
-**Persistence**: `player` table in SQLite. Single row (single-player game).
-
-### F-3: FSRS Scheduling
-
-Replace `src/core/spaced-repetition/Scheduler.ts` with FSRS-based scheduling.
-
-**New ScheduleData**:
-```typescript
-interface ScheduleData {
-  cardId: string;
-  difficulty: number;    // FSRS difficulty [1-10]
-  stability: number;     // FSRS stability (days)
-  reps: number;
-  lapses: number;
-  state: 'new' | 'learning' | 'review' | 'relearning';
-  due: string;           // ISO date
-  lastReview: string;    // ISO date
-}
-```
-
-**Quality → FSRS Rating mapping**:
-- Perfect → Easy
-- Correct → Good
-- Partial → Hard
-- Wrong → Again
-- Timeout → Again
-
-**Migration**: New migration `002_fsrs` adds FSRS columns to `recall_stats`, converts existing SM-2 data (map easeFactor inversely to difficulty, use intervalDays as initial stability).
-
-### F-4: Combat System
-
-Combat is the core gameplay loop. Each combat encounter presents flashcards as "attacks."
-
-**Combat flow:**
-1. Player encounters an enemy (triggered from Hub or Zone exploration)
-2. A flashcard is shown as the "attack prompt"
-3. Player answers → answer quality determines combat outcome
-4. Repeat until enemy HP reaches 0 (victory) or player HP reaches 0 (defeat)
-
-**Answer → Combat mapping:**
-
-| Quality | Combat Effect | XP Modifier |
-|---------|--------------|-------------|
-| Perfect | Critical hit: `attack * 2.0` damage | 1.5x |
-| Correct | Normal hit: `attack * 1.0` damage | 1.0x |
-| Partial | Glancing blow: `attack * 0.5` damage | 0.5x |
-| Wrong | Enemy attacks: `enemy_attack - defense` damage to player | 0.25x |
-| Timeout | Enemy attacks + poison: damage + 5 DoT next turn | 0x |
-
-**Turn structure:**
-1. Show card front + enemy info
-2. Player types answer
-3. Evaluate answer → resolve damage
-4. Check win/lose conditions
-5. If enemy alive and player alive → next card
-
-**After combat:**
-- Victory: Earn XP (base XP * answer quality modifiers), gold, possible loot drop
-- Defeat: Lose 10% of gold (minimum 0), respawn at hub. No XP penalty.
-
-### F-5: Enemy System
-
-Enemies are generated from card FSRS difficulty.
-
-**Enemy tiers:**
-
-| Tier | Difficulty Range | Name Pool | HP Multiplier | Attack |
-|------|-----------------|-----------|---------------|--------|
-| Minion | D < 3 | Slime, Bat, Rat | 0.5x | 5-8 |
-| Common | D 3-5 | Goblin, Skeleton, Spider | 1.0x | 8-12 |
-| Elite | D 5-7 | Knight, Mage, Assassin | 1.5x | 12-18 |
-| Boss | D 7+ | Dragon, Lich, Demon | 3.0x | 18-25 |
-
-**Base HP**: `30 + (player_level * 5)`, then multiplied by tier multiplier.
-
-**Enemy loot tables**: Each tier has a weighted loot table. Higher tiers have better drop rates for rare equipment.
-
-### F-6: Equipment & Loot
-
-Three equipment slots: **Weapon**, **Armor**, **Accessory**.
-
-**Rarity tiers** (with terminal colors):
-- Common (white): +1-2 to a stat
-- Uncommon (green): +3-4 to a stat
-- Rare (cyan): +5-7 to a stat + minor special effect
-- Epic (magenta): +8-10 to a stat + major special effect
-
-**Drop rates after combat victory:**
-- No drop: 40%
-- Common: 35%
-- Uncommon: 18%
-- Rare: 6%
-- Epic: 1%
-
-**Equipment examples:**
-- Quill of Recall (Weapon, Rare): +6 attack, Perfect answers deal +3 bonus damage
-- Scholar's Robe (Armor, Uncommon): +4 defense, +5% XP bonus
-- Lucky Coin (Accessory, Common): +2 gold bonus per combat
-
-Equipment is stored in `equipment` and `inventory` tables.
-
-### F-7: Streak System
-
-Daily study streaks — the highest-impact engagement feature.
-
-**Rules:**
-- A "study day" requires completing at least 1 review session (minimum 5 cards)
-- Streak increments once per calendar day (UTC)
-- Missing a day resets the streak to 0 (unless a Shield is active)
-
-**Streak rewards:**
-- 3-day streak: +10% XP bonus
-- 7-day streak: +20% XP bonus + bonus gold
-- 14-day streak: +30% XP bonus + rare loot chance +2%
-- 30-day streak: +50% XP bonus + "Dedicated" title
-
-**Shield item**: Purchased with 100 gold. Prevents streak reset for 1 missed day. Max 3 shields in inventory.
-
-**Display**: Streak counter shown in the header bar at all times. Visual flame icon (🔥 or unicode equivalent) next to count.
-
-### F-8: Zone / World Map
-
-Zones are tied to decks and provide structured progression.
-
-**Zone structure:**
-- Each imported deck automatically creates a zone
-- Zones have a mastery requirement (default 70% of cards at "review" state in FSRS)
-- Completing a zone's mastery requirement unlocks a Boss fight
-- Defeating the Boss marks the zone as "cleared"
-
-**Zone map display** (ASCII):
-```
-  [Starter Meadow] ✓     cleared
-       |
-  [Crystal Caves] ◆      in progress (45% mastery)
-       |
-  [Shadow Library] ○      locked (requires Crystal Caves)
-       |
-  [Dragon Peak] ○         locked
-```
-
-**Hub zone**: Always available. Random encounters pull from all imported decks. This is the "quick play" option.
-
-### F-9: Hub Screen
-
-The hub is the central navigation point after character creation:
-
-```
-╭──────────────────────────────────────╮
-│         Realm of Recall              │
-│                                      │
-│  [1] Adventure  — Enter a zone       │
-│  [2] Quick Review — Review due cards │
-│  [3] Inventory  — Manage equipment   │
-│  [4] World Map  — View progression   │
-│  [5] Import     — Add new decks      │
-│  [6] Stats      — View statistics    │
-│                                      │
-│  15 cards due today                  │
-╰──────────────────────────────────────╯
-```
-
-- Number keys for quick selection
-- "Cards due today" count from FSRS scheduler
-- If streak is at risk (haven't studied today), show a warning
-
-### F-10: Stats Screen
-
-Show player statistics:
-- Total cards reviewed (all time)
-- Today's session stats (cards reviewed, accuracy %)
-- Current streak + longest streak
-- Cards by FSRS state (new / learning / review / relearning)
-- Average retention rate
-- Level progress bar
-- Combat record (wins / losses)
-
----
-
-## Database Schema (Migration 002)
+### Data Changes
 
 ```sql
--- Migration: 002_gamification
-CREATE TABLE player (
-  id INTEGER PRIMARY KEY DEFAULT 1,
-  name TEXT NOT NULL DEFAULT 'Hero',
-  class TEXT NOT NULL DEFAULT 'scholar',
-  level INTEGER NOT NULL DEFAULT 1,
-  xp INTEGER NOT NULL DEFAULT 0,
-  hp INTEGER NOT NULL DEFAULT 100,
-  max_hp INTEGER NOT NULL DEFAULT 100,
-  attack INTEGER NOT NULL DEFAULT 10,
-  defense INTEGER NOT NULL DEFAULT 5,
-  gold INTEGER NOT NULL DEFAULT 0,
-  streak_days INTEGER NOT NULL DEFAULT 0,
-  longest_streak INTEGER NOT NULL DEFAULT 0,
-  last_review_date TEXT,
-  shield_count INTEGER NOT NULL DEFAULT 0,
-  total_reviews INTEGER NOT NULL DEFAULT 0,
-  total_correct INTEGER NOT NULL DEFAULT 0,
-  combat_wins INTEGER NOT NULL DEFAULT 0,
-  combat_losses INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+ALTER TABLE recall_attempts ADD COLUMN confidence TEXT;
+ALTER TABLE recall_stats ADD COLUMN gap_streak INTEGER NOT NULL DEFAULT 0;
+```
 
-CREATE TABLE equipment (
+Extend `RecallAttempt` with optional `confidence?: ConfidenceLevel`.
+Extend `CardStats` with `gapStreak: number`.
+
+### Files
+
+- Modify: `src/types/index.ts` (add ConfidenceLevel enum, extend interfaces)
+- Modify: `src/core/spaced-repetition/Scheduler.ts` (new `getEffectiveRating(quality, confidence)`)
+- Modify: `src/core/combat/CombatEngine.ts` (confidence-based damage multipliers)
+- Modify: `src/components/review/ReviewScreen.tsx` (add confidence prompt after correct answers)
+- Modify: `src/data/repositories/StatsRepository.ts` (gap_streak tracking)
+
+---
+
+## Feature F-12: Card Evolution System (Rule of 3)
+
+**Learning science**: 3 correct in a row → card is known (combine/cut). 3 wrong out of 5 → encoding is bad (go deeper). Anki's leech detection is similar but triggers too late.
+
+**RPG mechanic**: Cards evolve through tiers with visual upgrades and combat bonuses.
+
+### Specification
+
+**Evolution tiers**:
+
+| Tier | Name | Trigger | Visual | Combat Bonus |
+|---|---|---|---|---|
+| 0 | New | Default state | Dim border | None |
+| 1 | Learned | 3 consecutive correct + state != "new" | Cyan border, 1 star | +25% damage |
+| 2 | Proven | 3 consecutive correct at Good+ AND stability >= 10 | Gold border, 2 stars | +50% damage, +10% crit |
+| 3 | Mastered | 3 consecutive correct at Good+ AND stability >= 30 AND 0 lapses since tier 2 | Purple border, 3 stars | +100% damage, +25% crit |
+
+- Tiers never regress. A lapsed Mastered card enters relearning but keeps its tier visually with a "cracked" indicator until re-proven (3 consecutive correct again).
+- The `consecutive_correct` count in `recall_stats` already exists and tracks this.
+
+**Card health system**:
+
+| Status | Trigger | Effect |
+|---|---|---|
+| Healthy | Default | Normal |
+| Struggling | 3 wrong out of last 5 attempts | Yellow warning, "This card needs deeper study" |
+| Leech | 5+ total lapses | Red warning, suspended from combat |
+
+### Data Changes
+
+```sql
+ALTER TABLE recall_stats ADD COLUMN evolution_tier INTEGER NOT NULL DEFAULT 0;
+```
+
+### Files
+
+- Create: `src/core/cards/CardEvolution.ts` (tier evaluation, card health assessment — pure functions)
+- Create: `tests/core/CardEvolution.test.ts`
+- Modify: `src/core/combat/CombatEngine.ts` (tier-based damage multipliers)
+- Modify: `src/components/review/FlashcardFace.tsx` (tier-based visual styling)
+
+---
+
+## Feature F-13: Interleaved Retrieval Modes (Battle Styles)
+
+**Learning science**: Interleaving retrieval format compounds the spacing effect. Varying how you recall creates multiple memory pathways. Free recall > cued recall > recognition.
+
+**RPG mechanic**: 4 "Battle Styles" with different combat properties. System selects styles to force variety.
+
+### Specification
+
+**Modes**:
+
+| Mode | RPG Name | How It Works | Damage Mult |
+|---|---|---|---|
+| Standard | Quick Strike | Type the answer (current Q&A) | 1.0x |
+| Reversed | Parry | Show answer, type the question/term | 1.1x |
+| Teach | Scholar's Lecture | Show front, explain freely, self-rate 1-4 | 1.5x |
+| Connect | Combo Attack | Show 2 card fronts, explain relationship, self-rate 1-3 | 1.2x per card |
+
+**Mode selection algorithm**:
+- New/relearning cards → always Standard
+- Learning cards → Standard or Reversed only
+- Review cards → weighted random (Standard=40, Reversed=25, Teach=20, Connect=15)
+- Recency penalty: reduce weight if mode was used recently for this card
+- Session rule: if 3+ cards used the same mode, force a switch
+
+**Teach mode UX**:
+1. Show card front + "Explain this concept:"
+2. Free-text input
+3. Show correct answer as reference
+4. Self-rate: [1] Nailed it→Perfect, [2] Decent→Correct, [3] Weak→Partial, [4] Wrong→Wrong
+
+**Connect mode UX**:
+1. Show two card fronts
+2. "How do these relate?" + free-text input
+3. Show both answers
+4. Self-rate: [1] Strong→Correct, [2] Partial→Partial, [3] Missed→Wrong
+5. Both cards get scheduling update
+
+**Reversed mode**: Swap front/back. Use `evaluateAnswer` with card front as target.
+
+### Data Changes
+
+```sql
+ALTER TABLE recall_attempts ADD COLUMN retrieval_mode TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE recall_attempts ADD COLUMN response_text TEXT;
+```
+
+### Files
+
+- Create: `src/core/review/ModeSelector.ts` (weighted selection, recency penalty — pure functions)
+- Create: `tests/core/ModeSelector.test.ts`
+- Modify: `src/types/index.ts` (add RetrievalMode enum, extend RecallAttempt)
+- Modify: `src/components/review/ReviewScreen.tsx` (mode-aware rendering)
+- Modify: `src/data/repositories/StatsRepository.ts` (store/query retrieval_mode)
+
+---
+
+## Feature F-14: Post-Battle Reflection (Kolb's Cycle)
+
+**Learning science**: Kolb's Cycle (Experience→Reflection→Abstraction→Experimentation) is the most powerful metacognitive technique. Brief structured reflection after sessions dramatically improves retention.
+
+**RPG mechanic**: "Post-Battle Meditation" awards Wisdom XP.
+
+### Specification
+
+**Micro-reflection (every session, ~5 seconds)**:
+```
+How did that battle feel?
+[1] Crushing defeat (I was guessing)
+[2] Hard-fought (I had to think)
+[3] Effortless (too easy)
+```
+Single keystroke. Awards +25 Wisdom XP.
+
+**Battle journal (30% of sessions, optional)**:
+Random prompt from a pool of 15+, rotated, never repeat consecutively:
+- "Which card caught you off guard? Why?"
+- "If you had to teach one thing from this battle, what would it be?"
+- "What tactic will you try next time?"
+- "What mistake taught you the most today?"
+- "How does your recall compare to yesterday?"
+- etc.
+
+Free-text, max ~200 chars. Awards +50 Wisdom XP. Skippable with Esc.
+
+**Growth mindset reframes** (on sessions with accuracy <70%):
+One contextual CPJ message after low-accuracy sessions:
+- Acknowledge factually: "Tough battle — X% accuracy."
+- Process reframe: "Every missed card is now primed for stronger memory."
+- Journey context: "Your first session was Y%. You're improving."
+
+**Wisdom XP**: New player stat, accumulated through reflections. Visible in stats. Does NOT affect combat — it's a metacognitive growth metric.
+
+### Data Changes
+
+```sql
+CREATE TABLE session_reflections (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  slot TEXT NOT NULL CHECK(slot IN ('weapon', 'armor', 'accessory')),
-  rarity TEXT NOT NULL DEFAULT 'common' CHECK(rarity IN ('common', 'uncommon', 'rare', 'epic')),
-  attack_bonus INTEGER NOT NULL DEFAULT 0,
-  defense_bonus INTEGER NOT NULL DEFAULT 0,
-  hp_bonus INTEGER NOT NULL DEFAULT 0,
-  xp_bonus_pct INTEGER NOT NULL DEFAULT 0,
-  gold_bonus_pct INTEGER NOT NULL DEFAULT 0,
-  crit_bonus_pct INTEGER NOT NULL DEFAULT 0,
-  special_effect TEXT
+  session_type TEXT NOT NULL CHECK(session_type IN ('combat', 'review')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  difficulty_rating INTEGER NOT NULL CHECK(difficulty_rating BETWEEN 1 AND 3),
+  journal_entry TEXT,
+  prompt_used TEXT,
+  accuracy REAL NOT NULL,
+  cards_reviewed INTEGER NOT NULL,
+  deck_id TEXT,
+  FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE SET NULL
 );
+CREATE INDEX idx_reflections_date ON session_reflections(created_at);
 
-CREATE TABLE inventory (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  player_id INTEGER NOT NULL DEFAULT 1 REFERENCES player(id),
-  equipment_id TEXT NOT NULL REFERENCES equipment(id),
-  equipped INTEGER NOT NULL DEFAULT 0
-);
+ALTER TABLE player ADD COLUMN wisdom_xp INTEGER NOT NULL DEFAULT 0;
+```
 
-CREATE TABLE zones (
+### Files
+
+- Create: `src/core/reflection/ReflectionEngine.ts` (prompt selection, CPJ reframes, Wisdom XP calc)
+- Create: `src/components/review/ReflectionScreen.tsx` (micro-reflection + journal UI)
+- Create: `src/data/repositories/ReflectionRepository.ts` (CRUD for session_reflections)
+- Create: `tests/core/ReflectionEngine.test.ts`
+- Create: `tests/data/ReflectionRepository.test.ts`
+- Modify: `src/components/screens/CombatScreen.tsx` (show reflection after combat)
+- Modify: `src/data/database.ts` (migration 004)
+
+---
+
+## Feature F-15: Marginal Gains Dashboard
+
+**Learning science**: "Your brain cannot detect gradual improvement. Without tracking, you spiral into demotivation and quit." Compare only to your own past. Track compound growth.
+
+**RPG mechanic**: Enhanced Stats screen with sparkline trends.
+
+### Specification
+
+**Metrics** (7-day rolling window):
+
+| Metric | Visualization | What It Shows |
+|---|---|---|
+| Accuracy trend | ASCII sparkline (▁▂▃▄▅▆▇█) | % correct over last 7 sessions |
+| Response speed | ASCII sparkline | Median response time trend |
+| Mastery depth | Horizontal bar | % of cards at each evolution tier |
+| Consistency | Dot grid (14 days) | Days active in last 2 weeks |
+| Confidence calibration | Percentage | Self-rated confidence vs actual accuracy |
+| Cards mastered | Count + delta | Cards at tier 2+, with weekly change |
+
+**Compound growth projection**: "At this pace, in 30 more days: ~X cards mastered"
+
+### Data Changes
+
+No new tables — computed from existing `recall_attempts`, `recall_stats`, and `session_reflections`.
+
+### Files
+
+- Create: `src/core/analytics/MarginalGains.ts` (trend calc, sparkline generation — pure functions)
+- Create: `tests/core/MarginalGains.test.ts`
+- Modify: `src/components/screens/StatsScreen.tsx` (add dashboard sections)
+
+---
+
+## Database Migration: 004_ultra_learner
+
+```sql
+-- Confidence tracking
+ALTER TABLE recall_attempts ADD COLUMN confidence TEXT;
+ALTER TABLE recall_attempts ADD COLUMN retrieval_mode TEXT NOT NULL DEFAULT 'standard';
+ALTER TABLE recall_attempts ADD COLUMN response_text TEXT;
+
+-- Card evolution
+ALTER TABLE recall_stats ADD COLUMN evolution_tier INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE recall_stats ADD COLUMN gap_streak INTEGER NOT NULL DEFAULT 0;
+
+-- Player wisdom
+ALTER TABLE player ADD COLUMN wisdom_xp INTEGER NOT NULL DEFAULT 0;
+
+-- Session reflections
+CREATE TABLE session_reflections (
   id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  deck_id TEXT NOT NULL REFERENCES decks(id) ON DELETE CASCADE,
-  required_mastery REAL NOT NULL DEFAULT 0.7,
-  boss_defeated INTEGER NOT NULL DEFAULT 0,
-  order_index INTEGER NOT NULL DEFAULT 0
+  session_type TEXT NOT NULL CHECK(session_type IN ('combat', 'review')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  difficulty_rating INTEGER NOT NULL CHECK(difficulty_rating BETWEEN 1 AND 3),
+  journal_entry TEXT,
+  prompt_used TEXT,
+  accuracy REAL NOT NULL,
+  cards_reviewed INTEGER NOT NULL,
+  deck_id TEXT,
+  FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE SET NULL
 );
 
--- Add FSRS columns to recall_stats
-ALTER TABLE recall_stats ADD COLUMN difficulty REAL NOT NULL DEFAULT 5.0;
-ALTER TABLE recall_stats ADD COLUMN stability REAL NOT NULL DEFAULT 0;
-ALTER TABLE recall_stats ADD COLUMN lapses INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE recall_stats ADD COLUMN card_state TEXT NOT NULL DEFAULT 'new';
-ALTER TABLE recall_stats ADD COLUMN last_review_at TEXT;
+CREATE INDEX idx_reflections_date ON session_reflections(created_at);
 ```
 
 ---
 
-## New File Structure
+## Testing Strategy (v0.4.0)
 
-```
-src/
-  core/
-    combat/
-      CombatEngine.ts        — Turn resolution, damage calc, win/loss
-      EnemyGenerator.ts      — Generate enemies from card difficulty
-      LootTable.ts           — Weighted random equipment drops
-    progression/
-      XPCalculator.ts        — XP from answers, bonuses from class/streak/equipment
-      LevelSystem.ts         — Level thresholds, stat growth per level
-      StreakTracker.ts        — Daily streak logic, shield mechanics
-    player/
-      PlayerStats.ts         — Compute effective stats (base + equipment + level)
-      ClassDefinitions.ts    — Scholar/Warrior/Rogue base stats
-    spaced-repetition/
-      Scheduler.ts           — REWRITE: FSRS-based scheduling
-    cards/
-      CardEvaluator.ts       — (existing, unchanged)
-      ClozeParser.ts         — (existing, unchanged)
-  data/
-    database.ts              — (existing, add migration 002)
-    repositories/
-      CardRepository.ts      — (existing, unchanged)
-      StatsRepository.ts     — (existing, update for FSRS fields)
-      PlayerRepository.ts    — NEW: player CRUD
-      EquipmentRepository.ts — NEW: equipment + inventory CRUD
-      ZoneRepository.ts      — NEW: zone CRUD
-  components/
-    app/
-      App.tsx                — NEW: fullscreen shell, screen router, theme
-      Header.tsx             — NEW: persistent header bar
-      StatusBar.tsx          — NEW: persistent bottom status bar
-      ThemeProvider.tsx       — NEW: color theme context
-    screens/
-      TitleScreen.tsx        — NEW: first-launch character creation
-      HubScreen.tsx          — NEW: main menu hub
-      CombatScreen.tsx       — NEW: combat encounter UI
-      InventoryScreen.tsx    — NEW: equipment management
-      MapScreen.tsx          — NEW: zone/world map
-      StatsScreen.tsx        — NEW: player statistics
-    review/
-      ReviewScreen.tsx       — (existing, integrate into fullscreen layout)
-      FlashcardFace.tsx      — (existing, unchanged)
-      ReviewSummary.tsx      — (existing, update with XP/gold earned)
-    combat/
-      EnemyDisplay.tsx       — NEW: enemy name, HP bar, ASCII sprite
-      CombatLog.tsx          — NEW: scrollable combat action log
-      LootDrop.tsx           — NEW: loot reveal animation
-      DamageNumber.tsx       — NEW: animated damage display
-    common/
-      ProgressBar.tsx        — (existing, enhance with color themes)
-      SelectMenu.tsx         — (existing, replace with @inkjs/ui Select)
-  commands/
-    index.ts                 — NEW: single entry point, launch fullscreen app
-    import.tsx               — (existing, update to work within fullscreen)
-  types/
-    index.ts                 — (existing, extend with new types)
-    combat.ts                — NEW: combat-specific types
-    player.ts                — NEW: player/equipment types
-```
+| Feature | Test File | Key Cases |
+|---|---|---|
+| Confidence | `tests/core/ConfidenceRating.test.ts` | FSRS rating mapping, gap streak tracking, knowledge gap detection |
+| Evolution | `tests/core/CardEvolution.test.ts` | Tier thresholds, no regression, struggling/leech detection |
+| Mode Selector | `tests/core/ModeSelector.test.ts` | Weight distribution, recency penalty, new cards always Standard |
+| Reflection | `tests/core/ReflectionEngine.test.ts` | Prompt rotation, CPJ trigger, Wisdom XP |
+| Marginal Gains | `tests/core/MarginalGains.test.ts` | Sparkline generation, trend calc, calibration |
+| Reflection Repo | `tests/data/ReflectionRepository.test.ts` | CRUD, migration 004 |
+| Scheduler update | Update `tests/core/Scheduler.test.ts` | `getEffectiveRating` with confidence |
+| Combat update | Update `tests/core/CombatEngine.test.ts` | Tier/confidence damage multipliers |
 
 ---
 
-## Testing Strategy
+## Non-Functional Requirements (v0.4.0)
 
-### New Test Coverage
-
-| Area | Package | Approach |
-|------|---------|----------|
-| FSRS scheduler | vitest | Known-value verification against FSRS spec, property-based with fast-check |
-| Combat engine | vitest + fast-check | Property tests: HP never negative, damage always resolves, win/loss deterministic |
-| XP/Level system | vitest | Boundary tests at level thresholds |
-| Loot table | vitest + fast-check | Property: rarity distribution matches weights over N iterations |
-| Streak tracker | vitest (fake timers) | Day boundaries, shield mechanics, reset logic |
-| Ink components | vitest + ink-testing-library | Render output assertions, keyboard input simulation |
-| CLI integration | vitest | Factory pattern for Commander, temp database for e2e |
-
-### New Dev Dependencies
-
-```
-ink-testing-library
-fast-check
-@fast-check/vitest
-@vitest/coverage-v8
-```
-
-### Coverage Targets
-
-- `src/core/`: 90% line coverage (pure logic, fully testable)
-- `src/data/`: 80% line coverage
-- `src/components/`: 60% line coverage (UI rendering)
-- Overall: 75%
-
----
-
-## Non-Functional Requirements
-
-### NFR-1: Performance
-- Database queries < 10ms (SQLite in-process, indexed)
-- Screen transitions < 50ms (React state update)
-- No perceptible lag on key input
-
-### NFR-2: Terminal Compatibility
-- Works on: Windows Terminal, iTerm2, Kitty, Ghostty, standard macOS Terminal
-- Graceful fallback if terminal doesn't support Unicode box drawing
-- Respect `NO_COLOR` environment variable
-
-### NFR-3: Data Safety
-- All game state in `~/.realm-of-recall/game.db`
-- SQLite WAL mode for crash resistance
-- No data loss on unexpected exit (no in-memory-only state that isn't flushed)
-
-### NFR-4: Accessibility
-- All UI navigable via keyboard (no mouse required — it's a CLI)
-- Color is never the only indicator of state (text labels accompany colors)
-- Screen reader-friendly text output when not in fullscreen mode
-
----
-
-## Out of Scope (v0.3.0+)
-
-- Skill tree system
-- Companion/pet creature
-- Achievement system with badges
-- Daily/weekly quest system
-- Multiplayer leaderboards
-- Anki deck import (.apkg)
-- LLM-powered card generation
-- Sound effects
+- All new core logic in `src/core/` as pure functions — no I/O, no UI
+- All functions using randomness accept optional `rng` parameter
+- No new runtime dependencies
+- Backward compatible — existing saves work after migration 004
+- Combat UX stays fast — confidence prompt is single keystroke, no Enter
+- Existing tests must continue passing
