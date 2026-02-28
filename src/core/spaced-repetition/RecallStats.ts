@@ -24,6 +24,8 @@ export class RecallTracker {
         consecutiveCorrect: 0,
         bestStreak: 0,
         totalResponseTime: 0,
+        gapStreak: 0,
+        evolutionTier: 0,
       };
       this.stats.set(cardId, s);
     }

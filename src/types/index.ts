@@ -19,6 +19,19 @@ export enum CardDifficulty {
   Hard = "hard",
 }
 
+export enum ConfidenceLevel {
+  Guess = "guess",
+  Knew = "knew",
+  Instant = "instant",
+}
+
+export enum RetrievalMode {
+  Standard = "standard",
+  Reversed = "reversed",
+  Teach = "teach",
+  Connect = "connect",
+}
+
 export interface Card {
   id: string;
   front: string;
@@ -42,6 +55,9 @@ export interface RecallAttempt {
   responseTime: number;
   quality: AnswerQuality;
   wasTimed: boolean;
+  confidence?: ConfidenceLevel;
+  retrievalMode?: RetrievalMode;
+  responseText?: string;
 }
 
 export interface CardStats {
@@ -50,6 +66,8 @@ export interface CardStats {
   consecutiveCorrect: number;
   bestStreak: number;
   totalResponseTime: number;
+  gapStreak: number;
+  evolutionTier: number;
 }
 
 // SM-2 scheduling (legacy)

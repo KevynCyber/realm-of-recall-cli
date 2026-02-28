@@ -177,4 +177,32 @@ const migrations = [
     name: "003_deck_equipped",
     sql: `ALTER TABLE decks ADD COLUMN equipped INTEGER NOT NULL DEFAULT 1;`,
   },
+  {
+    name: "004_ultra_learner",
+    sql: `
+      ALTER TABLE recall_attempts ADD COLUMN confidence TEXT;
+      ALTER TABLE recall_attempts ADD COLUMN retrieval_mode TEXT NOT NULL DEFAULT 'standard';
+      ALTER TABLE recall_attempts ADD COLUMN response_text TEXT;
+
+      ALTER TABLE recall_stats ADD COLUMN evolution_tier INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recall_stats ADD COLUMN gap_streak INTEGER NOT NULL DEFAULT 0;
+
+      ALTER TABLE player ADD COLUMN wisdom_xp INTEGER NOT NULL DEFAULT 0;
+
+      CREATE TABLE session_reflections (
+        id TEXT PRIMARY KEY,
+        session_type TEXT NOT NULL CHECK(session_type IN ('combat','review')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        difficulty_rating INTEGER NOT NULL CHECK(difficulty_rating BETWEEN 1 AND 3),
+        journal_entry TEXT,
+        prompt_used TEXT,
+        accuracy REAL NOT NULL,
+        cards_reviewed INTEGER NOT NULL,
+        deck_id TEXT,
+        FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE SET NULL
+      );
+
+      CREATE INDEX idx_reflections_date ON session_reflections(created_at);
+    `,
+  },
 ];
