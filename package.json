@@ -1,6 +1,6 @@
 {
   "name": "realm-of-recall",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "A CLI RPG where combat is powered by flashcard recall",
   "type": "module",
   "bin": {
@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
+    "adm-zip": "^0.5.16",
     "better-sqlite3": "^11.7.0",
     "commander": "^13.1.0",
     "fullscreen-ink": "^0.1.0",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.2.4",
+    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.12",
     "@types/react": "^18.3.0",
     "@vitest/coverage-v8": "^2.1.9",

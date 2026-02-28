@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0] - 2026-02-28
+
+### Added
+
+- Anki deck import (.apkg): import existing Anki decks directly
+  - Supports standard (front/back) and cloze deletion note types
+  - Strips HTML tags and media references for clean CLI display
+  - Handles `collection.anki2` and `collection.anki21` schemas
+  - Auto-creates zones for imported Anki decks
+- 13 new tests for ApkgImporter (220 total)
+
 ## [0.3.1] - 2026-02-28
 
 ### Fixed

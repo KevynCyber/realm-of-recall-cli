@@ -6,6 +6,7 @@ import { CardRepository } from "../data/repositories/CardRepository.js";
 import { ZoneRepository } from "../data/repositories/ZoneRepository.js";
 import { importJson } from "../importers/JsonImporter.js";
 import { importCsv } from "../importers/CsvImporter.js";
+import { importApkg } from "../importers/ApkgImporter.js";
 
 interface Props {
   filePath: string;
@@ -27,8 +28,10 @@ export function ImportCommand({ filePath }: Props) {
         result = importJson(resolved);
       } else if (ext === ".csv" || ext === ".tsv") {
         result = importCsv(resolved);
+      } else if (ext === ".apkg") {
+        result = importApkg(resolved);
       } else {
-        throw new Error(`Unsupported file type: ${ext}. Use .json, .csv, or .tsv`);
+        throw new Error(`Unsupported file type: ${ext}. Use .json, .csv, .tsv, or .apkg`);
       }
 
       const db = getDatabase();

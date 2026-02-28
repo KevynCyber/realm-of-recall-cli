@@ -63,6 +63,11 @@ What is 2+2?,4
 Capital of Japan?,Tokyo
 ```
 
+**Anki (.apkg)** — Import existing Anki decks directly. Supports standard and cloze note types.
+```bash
+npx tsx bin/ror.ts import my-anki-deck.apkg
+```
+
 Cloze deletions are supported: `{{c1::answer::hint}}`
 
 ## Spaced Repetition
@@ -77,7 +82,7 @@ Cards are scheduled using the FSRS algorithm (via ts-fsrs). Answer quality affec
 ## Development
 
 ```bash
-npm test          # Run tests (207 tests)
+npm test          # Run tests (220 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```
@@ -87,7 +92,7 @@ npm run build     # Build with tsup
 - `src/core/` — Pure game logic (combat, progression, scheduling). No UI, no I/O.
 - `src/data/` — SQLite persistence layer (repositories, migrations)
 - `src/components/` — Ink UI components (screens, combat UI, review)
-- `src/importers/` — Deck import logic (JSON, CSV/TSV)
+- `src/importers/` — Deck import logic (JSON, CSV/TSV, Anki .apkg)
 - `src/types/` — TypeScript type definitions
 
 ## Data

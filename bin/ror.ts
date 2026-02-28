@@ -11,7 +11,7 @@ const program = new Command();
 program
   .name("ror")
   .description("Realm of Recall — A CLI RPG powered by flashcard recall")
-  .version("0.3.1")
+  .version("0.4.0")
   .action(() => {
     const { waitUntilExit } = render(React.createElement(App));
     waitUntilExit().then(() => {
@@ -22,7 +22,7 @@ program
 
 program
   .command("import <file>")
-  .description("Import a deck from JSON, CSV, or TSV file")
+  .description("Import a deck from JSON, CSV, TSV, or Anki .apkg file")
   .action((file: string) => {
     const { waitUntilExit } = render(
       React.createElement(ImportCommand, { filePath: file }),
