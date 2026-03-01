@@ -87,6 +87,7 @@ import {
 } from "../../core/combat/DailyChallenge.js";
 import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents.js";
 import { playBel } from "../../core/ui/TerminalEffects.js";
+import { setTerminalTitle, clearTerminalTitle, notifyBel } from "../../utils/TerminalTitle.js";
 import {
   getBreakLevel,
   getBreakMessage,
@@ -256,6 +257,42 @@ export default function App() {
   const [speedTrend, setSpeedTrend] = useState<TrendResult | undefined>(
     undefined,
   );
+
+  // Update terminal title on screen transitions
+  useEffect(() => {
+    const titleMap: Record<string, string> = {
+      title: "Realm of Recall",
+      hub: "Realm of Recall \u2014 Hub",
+      welcome_back: "Realm of Recall \u2014 Welcome Back",
+      review: "Realm of Recall \u2014 Review",
+      review_summary: "Realm of Recall \u2014 Review Summary",
+      reflection: "Realm of Recall \u2014 Reflection",
+      inventory: "Realm of Recall \u2014 Inventory",
+      map: "Realm of Recall \u2014 Map",
+      stats: "Realm of Recall \u2014 Stats",
+      decks: "Realm of Recall \u2014 Decks",
+      achievements: "Realm of Recall \u2014 Achievements",
+      bestiary: "Realm of Recall \u2014 Bestiary",
+      daily_challenge: "Realm of Recall \u2014 Daily Challenge",
+      random_event: "Realm of Recall \u2014 Random Event",
+      create_cards: "Realm of Recall \u2014 Create Cards",
+    };
+
+    if (screen === "combat" && combatEnemy) {
+      setTerminalTitle(`Realm of Recall \u2014 Combat vs ${combatEnemy.name}`);
+    } else if (screen === "dungeon" && dungeonRunState) {
+      setTerminalTitle(`Realm of Recall \u2014 Floor ${dungeonRunState.currentFloor}`);
+    } else {
+      setTerminalTitle(titleMap[screen] || "Realm of Recall");
+    }
+  }, [screen, combatEnemy, dungeonRunState]);
+
+  // Clean up terminal title on unmount
+  useEffect(() => {
+    return () => {
+      clearTerminalTitle();
+    };
+  }, []);
 
   const refreshCardsDue = useCallback(() => {
     try {
@@ -727,6 +764,11 @@ export default function App() {
         const streakResult = updateStreak(player, today);
         let updated = streakResult.player;
 
+        // BEL on streak milestones (7/30/100)
+        if ([7, 30, 100].includes(updated.streakDays) && updated.streakDays !== player.streakDays) {
+          notifyBel();
+        }
+
         // Compute retention multiplier bonus for combat cards
         let combatRetentionXpBonus = 0;
         let combatRetentionGoldBonus = 0;
@@ -819,6 +861,7 @@ export default function App() {
             );
             if (variant) {
               statsRepo.awardVariant(card.id, variant);
+              notifyBel();
             }
           }
         }
@@ -892,6 +935,11 @@ export default function App() {
         const today = getTodayUTC();
         const streakResult = updateStreak(player, today);
         let updated = streakResult.player;
+
+        // BEL on streak milestones (7/30/100)
+        if ([7, 30, 100].includes(updated.streakDays) && updated.streakDays !== player.streakDays) {
+          notifyBel();
+        }
 
         // Count correct answers
         const correctCount = results.filter(
@@ -975,6 +1023,7 @@ export default function App() {
             if (variant) {
               statsRepo.awardVariant(result.cardId, variant);
               earnedVariants.push({ cardId: result.cardId, variant: variant as "foil" | "golden" | "prismatic" });
+              notifyBel();
             }
           }
         }
@@ -1506,6 +1555,7 @@ export default function App() {
             }}
             onComplete={(result) => {
               if (!player) return;
+              notifyBel(); // Dungeon completion notification
               try {
                 const db = getDatabase();
                 const playerRepo = new PlayerRepository(db);
