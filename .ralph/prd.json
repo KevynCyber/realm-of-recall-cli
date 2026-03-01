@@ -93,7 +93,7 @@
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "DungeonRunScreen currently uses simulateFloorResult() which always returns victory:true. The onFloorCombat callback exists but App.tsx has an empty handler."
     },
     {
