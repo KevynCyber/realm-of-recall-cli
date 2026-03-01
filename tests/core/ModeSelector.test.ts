@@ -21,8 +21,8 @@ describe("selectMode", () => {
     }
   });
 
-  it("learning cards only get Standard or Reversed", () => {
-    const allowed = new Set([RetrievalMode.Standard, RetrievalMode.Reversed]);
+  it("learning cards only get Standard, Reversed, or Generate", () => {
+    const allowed = new Set([RetrievalMode.Standard, RetrievalMode.Reversed, RetrievalMode.Generate]);
     for (let i = 0; i < 100; i++) {
       const result = selectMode("learning", [], [], Math.random);
       expect(allowed.has(result)).toBe(true);
@@ -62,24 +62,25 @@ describe("selectMode", () => {
     }
   });
 
-  it("review cards can get all 4 modes with sufficient trials", () => {
+  it("review cards can get all 5 modes with sufficient trials", () => {
     const seen = new Set<RetrievalMode>();
     for (let i = 0; i < 1000; i++) {
       seen.add(selectMode("review", [], [], Math.random));
     }
-    expect(seen.size).toBe(4);
+    expect(seen.size).toBe(5);
     expect(seen.has(RetrievalMode.Standard)).toBe(true);
     expect(seen.has(RetrievalMode.Reversed)).toBe(true);
     expect(seen.has(RetrievalMode.Teach)).toBe(true);
     expect(seen.has(RetrievalMode.Connect)).toBe(true);
+    expect(seen.has(RetrievalMode.Generate)).toBe(true);
   });
 
   it("deterministic rng selects the expected mode", () => {
     // rng = () => 0 should always pick the first mode in the pool (Standard)
     expect(selectMode("review", [], [], () => 0)).toBe(RetrievalMode.Standard);
 
-    // rng = () => 0.999... should pick the last mode (Connect)
-    expect(selectMode("review", [], [], () => 0.9999)).toBe(RetrievalMode.Connect);
+    // rng = () => 0.999... should pick the last mode (Generate, now last in the pool)
+    expect(selectMode("review", [], [], () => 0.9999)).toBe(RetrievalMode.Generate);
   });
 });
 
@@ -99,15 +100,20 @@ describe("getModeDamageMultiplier", () => {
   it("Connect → 1.2", () => {
     expect(getModeDamageMultiplier(RetrievalMode.Connect)).toBe(1.2);
   });
+
+  it("Generate → 1.3", () => {
+    expect(getModeDamageMultiplier(RetrievalMode.Generate)).toBe(1.3);
+  });
 });
 
 describe("MODE_WEIGHTS", () => {
-  it("contains all four retrieval modes", () => {
+  it("contains all five retrieval modes", () => {
     const modes = MODE_WEIGHTS.map((w) => w.mode);
     expect(modes).toContain(RetrievalMode.Standard);
     expect(modes).toContain(RetrievalMode.Reversed);
     expect(modes).toContain(RetrievalMode.Teach);
     expect(modes).toContain(RetrievalMode.Connect);
+    expect(modes).toContain(RetrievalMode.Generate);
   });
 
   it("base weights sum to 100", () => {

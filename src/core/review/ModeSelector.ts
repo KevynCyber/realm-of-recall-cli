@@ -9,10 +9,11 @@ export interface ModeWeight {
 }
 
 export const MODE_WEIGHTS: ModeWeight[] = [
-  { mode: RetrievalMode.Standard, baseWeight: 40, recencyPenalty: 0.3 },
-  { mode: RetrievalMode.Reversed, baseWeight: 25, recencyPenalty: 0.5 },
-  { mode: RetrievalMode.Teach, baseWeight: 20, recencyPenalty: 0.7 },
-  { mode: RetrievalMode.Connect, baseWeight: 15, recencyPenalty: 0.8 },
+  { mode: RetrievalMode.Standard, baseWeight: 35, recencyPenalty: 0.3 },
+  { mode: RetrievalMode.Reversed, baseWeight: 22, recencyPenalty: 0.5 },
+  { mode: RetrievalMode.Teach, baseWeight: 18, recencyPenalty: 0.7 },
+  { mode: RetrievalMode.Connect, baseWeight: 12, recencyPenalty: 0.8 },
+  { mode: RetrievalMode.Generate, baseWeight: 13, recencyPenalty: 0.5 },
 ];
 
 /**
@@ -23,6 +24,7 @@ const MODE_UNLOCK_KEYS: Partial<Record<RetrievalMode, string>> = {
   [RetrievalMode.Reversed]: "reversed_mode",
   [RetrievalMode.Teach]: "teach_mode",
   [RetrievalMode.Connect]: "connect_mode",
+  [RetrievalMode.Generate]: "generate_mode",
 };
 
 /**
@@ -65,7 +67,7 @@ export function selectMode(
   let pool: ModeWeight[];
   if (cardState === "learning") {
     pool = availableWeights.filter(
-      (w) => w.mode === RetrievalMode.Standard || w.mode === RetrievalMode.Reversed,
+      (w) => w.mode === RetrievalMode.Standard || w.mode === RetrievalMode.Reversed || w.mode === RetrievalMode.Generate,
     );
   } else {
     // review (and any unknown state) — full pool
@@ -125,5 +127,7 @@ export function getModeDamageMultiplier(mode: RetrievalMode): number {
       return 1.5;
     case RetrievalMode.Connect:
       return 1.2;
+    case RetrievalMode.Generate:
+      return 1.3;
   }
 }

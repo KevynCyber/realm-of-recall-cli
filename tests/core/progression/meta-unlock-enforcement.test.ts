@@ -32,13 +32,13 @@ describe("selectMode — meta-progression mode gating", () => {
     expect(seen.has(RetrievalMode.Connect)).toBe(false);
   });
 
-  it("with all mode keys unlocked, review cards can get all 4 modes", () => {
-    const keys = new Set(["reversed_mode", "teach_mode", "connect_mode"]);
+  it("with all mode keys unlocked, review cards can get all 5 modes", () => {
+    const keys = new Set(["reversed_mode", "teach_mode", "connect_mode", "generate_mode"]);
     const seen = new Set<RetrievalMode>();
     for (let i = 0; i < 1000; i++) {
       seen.add(selectMode("review", [], [], Math.random, keys));
     }
-    expect(seen.size).toBe(4);
+    expect(seen.size).toBe(5);
   });
 
   it("without unlockedKeys parameter (undefined), all modes are available (backward compat)", () => {
@@ -46,7 +46,7 @@ describe("selectMode — meta-progression mode gating", () => {
     for (let i = 0; i < 1000; i++) {
       seen.add(selectMode("review", [], [], Math.random));
     }
-    expect(seen.size).toBe(4);
+    expect(seen.size).toBe(5);
   });
 
   it("new cards always get Standard regardless of unlock state", () => {
