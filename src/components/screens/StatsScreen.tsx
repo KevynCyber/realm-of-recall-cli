@@ -26,6 +26,9 @@ const RETENTION_PRESETS = [0.70, 0.75, 0.80, 0.85, 0.90, 0.92, 0.95, 0.97] as co
 /** Valid max new cards per day presets */
 const NEW_CARDS_PRESETS = [5, 10, 15, 20, 30, 50, 100, 9999] as const;
 
+/** Valid answer timer presets (0 = disabled) */
+const TIMER_PRESETS = [15, 20, 30, 45, 60, 0] as const;
+
 interface Props {
   player: Player;
   deckStats: DeckStat[];
@@ -33,6 +36,7 @@ interface Props {
   onBack: () => void;
   onUpdateRetention?: (retention: number) => void;
   onUpdateMaxNewCards?: (maxNewCards: number) => void;
+  onUpdateTimer?: (timerSeconds: number) => void;
   // Ultra-learner props (all optional for backward compat)
   accuracyTrend?: TrendResult;
   speedTrend?: TrendResult;
@@ -60,13 +64,14 @@ export function StatsScreen({
   onBack,
   onUpdateRetention,
   onUpdateMaxNewCards,
+  onUpdateTimer,
   accuracyTrend,
   speedTrend,
   consistencyGrid,
   wisdomXp,
 }: Props) {
   const theme = useGameTheme();
-  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards">("retention");
+  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer">("retention");
 
   useInput((input, key) => {
     if (key.escape || input === "b") {
@@ -75,17 +80,26 @@ export function StatsScreen({
     }
 
     // Switch settings tab
-    if (input === "r" && (onUpdateRetention || onUpdateMaxNewCards)) {
+    if (input === "r" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
       setSettingsTab("retention");
       return;
     }
-    if (input === "n" && (onUpdateRetention || onUpdateMaxNewCards)) {
+    if (input === "n" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
       setSettingsTab("newcards");
+      return;
+    }
+    if (input === "t" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
+      setSettingsTab("timer");
       return;
     }
 
     const num = parseInt(input, 10);
-    if (num >= 1 && num <= 8) {
+    if (settingsTab === "timer" && onUpdateTimer && num >= 1 && num <= TIMER_PRESETS.length) {
+      const newTimer = TIMER_PRESETS[num - 1];
+      if (newTimer !== player.timerSeconds) {
+        onUpdateTimer(newTimer);
+      }
+    } else if (num >= 1 && num <= 8) {
       if (settingsTab === "retention" && onUpdateRetention) {
         const newRetention = RETENTION_PRESETS[num - 1];
         if (newRetention !== player.desiredRetention) {
@@ -234,7 +248,7 @@ export function StatsScreen({
       )}
 
       {/* Section 9 — Settings */}
-      {(onUpdateRetention || onUpdateMaxNewCards) && (
+      {(onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer) && (
         <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
           <Box marginBottom={1}>
             <Text bold={settingsTab === "retention"} color={settingsTab === "retention" ? theme.colors.rare : theme.colors.muted}>
@@ -243,6 +257,10 @@ export function StatsScreen({
             <Text>{"  "}</Text>
             <Text bold={settingsTab === "newcards"} color={settingsTab === "newcards" ? theme.colors.rare : theme.colors.muted}>
               [N] New Cards/Day
+            </Text>
+            <Text>{"  "}</Text>
+            <Text bold={settingsTab === "timer"} color={settingsTab === "timer" ? theme.colors.rare : theme.colors.muted}>
+              [T] Timer
             </Text>
           </Box>
 
@@ -302,6 +320,35 @@ export function StatsScreen({
               </Box>
             </>
           )}
+
+          {settingsTab === "timer" && onUpdateTimer && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Answer Timer
+              </Text>
+              <Text color={theme.colors.muted}>
+                Time allowed per card. Off disables the timer entirely (accessibility).
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{player.timerSeconds === 0 ? "Off" : `${player.timerSeconds}s`}</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {TIMER_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.timerSeconds;
+                  const label = preset === 0 ? "Off" : `${preset}s`;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {label}
+                        {preset === 30 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
         </Box>
       )}
 
@@ -309,8 +356,8 @@ export function StatsScreen({
       <Box paddingX={1}>
         <Text color={theme.colors.muted}>
           Press <Text bold>Esc</Text> or <Text bold>b</Text> to go back
-          {(onUpdateRetention || onUpdateMaxNewCards) ? (
-            <Text>{" | "}<Text bold>1-8</Text> to change setting{" | "}<Text bold>R/N</Text> to switch tab</Text>
+          {(onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer) ? (
+            <Text>{" | "}<Text bold>{settingsTab === "timer" ? `1-${TIMER_PRESETS.length}` : "1-8"}</Text> to change setting{" | "}<Text bold>R/N/T</Text> to switch tab</Text>
           ) : null}
         </Text>
       </Box>

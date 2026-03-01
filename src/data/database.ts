@@ -246,4 +246,8 @@ const migrations = [
       ALTER TABLE recall_stats ADD COLUMN buried_until TEXT;
     `,
   },
+  {
+    name: "009_timer_seconds",
+    sql: `ALTER TABLE player ADD COLUMN timer_seconds INTEGER NOT NULL DEFAULT 30;`,
+  },
 ];

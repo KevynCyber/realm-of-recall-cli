@@ -29,6 +29,7 @@ interface Props {
   cards: Card[];
   onComplete: (results: ReviewResult[]) => void;
   mode?: RetrievalMode;
+  timerSeconds?: number;
 }
 
 type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate";
@@ -54,6 +55,7 @@ export function ReviewScreen({
   cards,
   onComplete,
   mode = RetrievalMode.Standard,
+  timerSeconds: timerSecondsProp = 30,
 }: Props) {
   // Look up evolution tiers for all cards
   const cardTiers = useMemo(() => {
@@ -112,7 +114,7 @@ export function ReviewScreen({
   const [undoMsg, setUndoMsg] = useState<string | null>(null);
 
   const card = cardQueue[currentIndex];
-  const totalTime = 30; // seconds
+  const totalTime = timerSecondsProp === 0 ? Infinity : timerSecondsProp; // 0 = disabled
   const isTeach = mode === RetrievalMode.Teach;
 
   // Build the "effective" card used for display & evaluation.

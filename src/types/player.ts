@@ -75,5 +75,6 @@ export interface Player {
   dailyChallengeDate: string | null;
   desiredRetention: number;
   maxNewCardsPerDay: number;
+  timerSeconds: number;
   createdAt: string;
 }

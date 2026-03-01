@@ -45,6 +45,7 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     dailyChallengeDate: null,
     desiredRetention: 0.9,
     maxNewCardsPerDay: 20,
+    timerSeconds: 30,
     createdAt: "2026-02-01",
     ...overrides,
   };
