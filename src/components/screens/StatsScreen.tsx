@@ -9,7 +9,7 @@ import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPer
 import { getAllUnlocks } from "../../core/progression/MetaUnlocks.js";
 import type { MetaUnlock } from "../../core/progression/MetaUnlocks.js";
 import type { CardRetentionSummary, SkipCostForecast } from "../../core/analytics/ForgettingCurve.js";
-import { getBranchInfo, investInBranch, getTotalPointsSpent, getUnlockedNodes } from "../../core/progression/SkillTree.js";
+import { getBranchInfo, getTotalPointsSpent } from "../../core/progression/SkillTree.js";
 import type { SkillBranch, SkillAllocation } from "../../core/progression/SkillTree.js";
 
 interface DeckStat {

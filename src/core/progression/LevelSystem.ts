@@ -53,7 +53,7 @@ export function checkLevelUp(player: Player): LevelUpResult {
  * Returns a new Player object (no mutation).
  */
 export function applyLevelUp(player: Player): Player {
-  let { level, xp, maxHp, attack, defense } = player;
+  let { level, xp, maxHp, attack, defense, skillPoints } = player;
 
   while (xp >= xpToNextLevel(level)) {
     xp -= xpToNextLevel(level);
@@ -61,6 +61,7 @@ export function applyLevelUp(player: Player): Player {
     maxHp += HP_PER_LEVEL;
     attack += ATTACK_PER_LEVEL;
     defense += DEFENSE_PER_LEVEL;
+    skillPoints += SKILL_POINTS_PER_LEVEL;
   }
 
   return {
@@ -71,5 +72,8 @@ export function applyLevelUp(player: Player): Player {
     hp: maxHp, // heal to full on level-up
     attack,
     defense,
+    skillPoints,
   };
 }
+
+const SKILL_POINTS_PER_LEVEL = 1;

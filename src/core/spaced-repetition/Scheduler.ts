@@ -90,8 +90,11 @@ function getFsrsInstance(desiredRetention?: number): ReturnType<typeof fsrs> {
 export function createInitialSchedule(cardId: string, wisdomXp?: number, stabilityBonusPct: number = 0): ScheduleData {
   const now = new Date();
   let stability = wisdomXp !== undefined && hasPerk(wisdomXp, "quick_learner") ? 1.1 : 0;
-  if (stabilityBonusPct > 0 && stability > 0) {
-    stability *= (1 + stabilityBonusPct / 100);
+  if (stabilityBonusPct > 0) {
+    stability = Math.max(stability, stabilityBonusPct / 100);
+    if (wisdomXp !== undefined && hasPerk(wisdomXp, "quick_learner")) {
+      stability = 1.1 * (1 + stabilityBonusPct / 100);
+    }
   }
   return {
     cardId,

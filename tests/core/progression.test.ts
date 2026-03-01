@@ -212,4 +212,17 @@ describe("applyLevelUp", () => {
     expect(updated.hp).toBe(55); // new maxHp
     expect(updated.maxHp).toBe(55);
   });
+
+  it("awards 1 skill point per level-up", () => {
+    const player = makePlayer({ level: 1, xp: 100, skillPoints: 0 });
+    const updated = applyLevelUp(player);
+    expect(updated.skillPoints).toBe(1);
+  });
+
+  it("awards skill points for multi level-up", () => {
+    const player = makePlayer({ level: 1, xp: 382, skillPoints: 2 });
+    const updated = applyLevelUp(player);
+    expect(updated.level).toBe(3);
+    expect(updated.skillPoints).toBe(4); // 2 existing + 2 new levels
+  });
 });
