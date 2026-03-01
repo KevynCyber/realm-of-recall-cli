@@ -9,6 +9,8 @@ import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPer
 import { getAllUnlocks } from "../../core/progression/MetaUnlocks.js";
 import type { MetaUnlock } from "../../core/progression/MetaUnlocks.js";
 import type { CardRetentionSummary, SkipCostForecast } from "../../core/analytics/ForgettingCurve.js";
+import { getBranchInfo, investInBranch, getTotalPointsSpent, getUnlockedNodes } from "../../core/progression/SkillTree.js";
+import type { SkillBranch, SkillAllocation } from "../../core/progression/SkillTree.js";
 
 interface DeckStat {
   name: string;
@@ -56,6 +58,7 @@ interface Props {
   unlockedKeys?: Set<string>;
   retentionSummary?: CardRetentionSummary;
   avgSkipCost?: SkipCostForecast;
+  onInvestSkill?: (branch: SkillBranch) => void;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -87,9 +90,10 @@ export function StatsScreen({
   unlockedKeys,
   retentionSummary,
   avgSkipCost,
+  onInvestSkill,
 }: Props) {
   const theme = useGameTheme();
-  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer">("retention");
+  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer" | "skills">("retention");
 
   useInput((input, key) => {
     if (key.escape || input === "b") {
@@ -110,8 +114,18 @@ export function StatsScreen({
       setSettingsTab("timer");
       return;
     }
+    if (input === "k" && onInvestSkill) {
+      setSettingsTab("skills");
+      return;
+    }
 
     const num = parseInt(input, 10);
+    // Skill tree investment: [1] Recall, [2] Battle, [3] Scholar
+    if (settingsTab === "skills" && onInvestSkill && num >= 1 && num <= 3) {
+      const branches: SkillBranch[] = ["recall", "battle", "scholar"];
+      onInvestSkill(branches[num - 1]);
+      return;
+    }
     if (settingsTab === "timer" && onUpdateTimer && num >= 1 && num <= TIMER_PRESETS.length) {
       const newTimer = TIMER_PRESETS[num - 1];
       if (newTimer !== player.timerSeconds) {
@@ -371,6 +385,14 @@ export function StatsScreen({
             <Text bold={settingsTab === "timer"} color={settingsTab === "timer" ? theme.colors.rare : theme.colors.muted}>
               [T] Timer
             </Text>
+            {onInvestSkill && (
+              <>
+                <Text>{"  "}</Text>
+                <Text bold={settingsTab === "skills"} color={settingsTab === "skills" ? theme.colors.rare : theme.colors.muted}>
+                  [K] Skills
+                </Text>
+              </>
+            )}
           </Box>
 
           {settingsTab === "retention" && onUpdateRetention && (
@@ -430,6 +452,73 @@ export function StatsScreen({
             </>
           )}
 
+          {settingsTab === "skills" && onInvestSkill && (
+            (() => {
+              const allocation: SkillAllocation = {
+                recall: player.skillRecall,
+                battle: player.skillBattle,
+                scholar: player.skillScholar,
+              };
+              const spent = getTotalPointsSpent(allocation);
+              const available = player.skillPoints - spent;
+              const branches: SkillBranch[] = ["recall", "battle", "scholar"];
+              const branchColors = { recall: "cyan", battle: "red", scholar: "magenta" };
+
+              return (
+                <>
+                  <Text bold color={theme.colors.rare}>
+                    Skill Tree
+                  </Text>
+                  <Text>
+                    Skill Points: <Text bold color={available > 0 ? theme.colors.success : theme.colors.muted}>{available}</Text>
+                    <Text color={theme.colors.muted}> ({spent} spent of {player.skillPoints} total)</Text>
+                  </Text>
+                  <Box marginTop={1} flexDirection="column">
+                    {branches.map((branch, i) => {
+                      const info = getBranchInfo(branch, allocation);
+                      const tierBar = Array.from({ length: info.maxTier }, (_, t) =>
+                        t < info.currentTier ? "\u2588" : "\u2591"
+                      ).join("");
+                      const canInvest = info.nextCost !== null && available >= info.nextCost;
+                      return (
+                        <Box key={branch} flexDirection="column" marginBottom={1}>
+                          <Text>
+                            <Text bold color={branchColors[branch]}>
+                              [{i + 1}] {info.branchName}
+                            </Text>
+                            <Text> {tierBar} </Text>
+                            <Text color={theme.colors.muted}>Tier {info.currentTier}/{info.maxTier}</Text>
+                            {info.nextCost !== null && (
+                              <Text color={canInvest ? theme.colors.success : theme.colors.muted}>
+                                {" "}(next: {info.nextCost} pts{canInvest ? " - ready!" : ""})
+                              </Text>
+                            )}
+                            {info.nextCost === null && (
+                              <Text color={theme.colors.gold}> MAX</Text>
+                            )}
+                          </Text>
+                          {info.nodes.filter(n => n.tier <= info.currentTier).map(node => (
+                            <Text key={node.id} color={theme.colors.muted}>
+                              {"  "}<Text color={theme.colors.success}>{"\u2713"}</Text> {node.name}: {node.description}
+                            </Text>
+                          ))}
+                          {info.currentTier < info.maxTier && (
+                            <Text color={theme.colors.muted}>
+                              {"  "}<Text color={theme.colors.warning}>{"\u25CB"}</Text> Next: {info.nodes[info.currentTier].name} — {info.nodes[info.currentTier].description}
+                            </Text>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  {available > 0 && (
+                    <Text color={theme.colors.success}>Press [1-3] to invest in a branch</Text>
+                  )}
+                </>
+              );
+            })()
+          )}
+
           {settingsTab === "timer" && onUpdateTimer && (
             <>
               <Text bold color={theme.colors.rare}>
@@ -466,7 +555,7 @@ export function StatsScreen({
         <Text color={theme.colors.muted}>
           Press <Text bold>Esc</Text> or <Text bold>b</Text> to go back
           {(onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer) ? (
-            <Text>{" | "}<Text bold>{settingsTab === "timer" ? `1-${TIMER_PRESETS.length}` : "1-8"}</Text> to change setting{" | "}<Text bold>R/N/T</Text> to switch tab</Text>
+            <Text>{" | "}<Text bold>{settingsTab === "skills" ? "1-3" : settingsTab === "timer" ? `1-${TIMER_PRESETS.length}` : "1-8"}</Text> to change setting{" | "}<Text bold>R/N/T{onInvestSkill ? "/K" : ""}</Text> to switch tab</Text>
           ) : null}
         </Text>
       </Box>
