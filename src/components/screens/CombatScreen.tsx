@@ -17,6 +17,8 @@ import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { rollLoot } from "../../core/combat/LootTable.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { generatePartialCue } from "../../core/cards/HintGenerator.js";
+import { getBossPhases, getCurrentPhase, hasPhaseChanged, isBossEnemy } from "../../core/combat/BossPhases.js";
+import type { BossPhase } from "../../core/combat/BossPhases.js";
 import { getEffectiveStats } from "../../core/player/PlayerStats.js";
 import { EnemyDisplay } from "../combat/EnemyDisplay.js";
 import { EncounterPreview } from "../combat/EncounterPreview.js";
@@ -132,6 +134,16 @@ export function CombatScreen({
   const [activeEffects, setActiveEffects] = useState<AbilityEffect[]>([]);
   const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
   const unlockedAbilities = getUnlockedAbilities(player.class, player.level);
+  // Boss phase tracking
+  const bossPhases = useMemo(() => {
+    if (!isBossEnemy(enemy.tier)) return null;
+    return getBossPhases(enemy.name);
+  }, [enemy.name, enemy.tier]);
+  const [currentBossPhase, setCurrentBossPhase] = useState<BossPhase | null>(() => {
+    if (!bossPhases) return null;
+    return getCurrentPhase(bossPhases, 1.0);
+  });
+  const [phaseTransitionMsg, setPhaseTransitionMsg] = useState<string | null>(null);
   // Suspend/bury confirmation
   const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
   // Undo support: snapshot of combat state before last answer
@@ -423,6 +435,18 @@ export function CombatScreen({
       }
 
       setCombat(finalState);
+
+      // Boss phase transition check
+      if (bossPhases && enemy.maxHp > 0) {
+        const prevHpPct = combat.enemy.hp / enemy.maxHp;
+        const newHpPct = finalState.enemy.hp / enemy.maxHp;
+        const transition = hasPhaseChanged(bossPhases, prevHpPct, newHpPct);
+        if (transition.changed && transition.newPhase) {
+          setCurrentBossPhase(transition.newPhase);
+          setPhaseTransitionMsg(`${enemy.name} enters ${transition.newPhase.name}! ${transition.newPhase.description}`);
+          setTimeout(() => setPhaseTransitionMsg(null), 3000);
+        }
+      }
 
       // Tick cooldowns after each answer
       setActiveAbilities((prev) => tickCooldowns(prev));
@@ -768,6 +792,23 @@ export function CombatScreen({
       <Box marginBottom={1}>
         <EnemyDisplay enemy={combat.enemy} />
       </Box>
+
+      {/* Boss phase indicator */}
+      {currentBossPhase && (
+        <Box marginBottom={1}>
+          <Text bold color={currentBossPhase.damageMultiplier >= 2.0 ? "red" : currentBossPhase.damageMultiplier >= 1.5 ? "yellow" : "cyan"}>
+            Phase: {currentBossPhase.name}
+          </Text>
+          {currentBossPhase.hintsDisabled && <Text dimColor> (Hints disabled)</Text>}
+          {currentBossPhase.xpMultiplier > 1.0 && <Text color="magenta"> ({currentBossPhase.xpMultiplier}x XP)</Text>}
+        </Box>
+      )}
+      {/* Phase transition announcement */}
+      {phaseTransitionMsg && (
+        <Box marginBottom={1}>
+          <Text bold color="yellow">{phaseTransitionMsg}</Text>
+        </Box>
+      )}
 
       {/* Player HP and SP */}
       <Box marginBottom={1}>
