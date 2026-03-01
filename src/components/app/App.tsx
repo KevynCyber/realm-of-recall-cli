@@ -92,7 +92,7 @@ import { playBel } from "../../core/ui/TerminalEffects.js";
 import { shouldTriggerOracleTrial, createOracleTrial, scoreOracleTrial, BASE_TRIAL_WXP } from "../../core/combat/OracleTrial.js";
 import type { OracleTrialResult } from "../../core/combat/OracleTrial.js";
 import { investInBranch, getAggregatedEffects } from "../../core/progression/SkillTree.js";
-import type { SkillBranch, SkillAllocation } from "../../core/progression/SkillTree.js";
+import type { SkillBranch } from "../../core/progression/SkillTree.js";
 import { setTerminalTitle, clearTerminalTitle, notifyBel } from "../../utils/TerminalTitle.js";
 import {
   getBreakLevel,
@@ -175,6 +175,10 @@ export function getMajorityCardState(
     }
   }
   return newCount > cards.length / 2 ? "new" : "review";
+}
+
+function getPlayerSkillEffects(p: Player): Map<import("../../core/progression/SkillTree.js").SkillEffectType, number> {
+  return getAggregatedEffects({ recall: p.skillRecall, battle: p.skillBattle, scholar: p.skillScholar });
 }
 
 export default function App() {
@@ -343,7 +347,7 @@ export default function App() {
       const p = playerRepo.getPlayer();
       let maxNew = p?.maxNewCardsPerDay ?? 20;
       if (p) {
-        const sa = getAggregatedEffects({ recall: p.skillRecall, battle: p.skillBattle, scholar: p.skillScholar });
+        const sa = getPlayerSkillEffects(p);
         const ncb = sa.get("new_card_bonus") ?? 0;
         if (ncb > 0) maxNew = Math.floor(maxNew * (1 + ncb / 100));
       }
@@ -404,7 +408,7 @@ export default function App() {
         const statsRepo = new StatsRepository(db);
         const equippedIds = cardRepo.getEquippedDeckIds();
         let maxNew = p.maxNewCardsPerDay ?? 20;
-        const ncbInit = getAggregatedEffects({ recall: p.skillRecall, battle: p.skillBattle, scholar: p.skillScholar }).get("new_card_bonus") ?? 0;
+        const ncbInit = getPlayerSkillEffects(p).get("new_card_bonus") ?? 0;
         if (ncbInit > 0) maxNew = Math.floor(maxNew * (1 + ncbInit / 100));
         const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
         setCardsDue(cardIds.length);
@@ -512,7 +516,7 @@ export default function App() {
         const equipRepo = new EquipmentRepository(db);
 
         let maxNew = player.maxNewCardsPerDay ?? 20;
-        const ncbCombat = getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("new_card_bonus") ?? 0;
+        const ncbCombat = getPlayerSkillEffects(player).get("new_card_bonus") ?? 0;
         if (ncbCombat > 0) maxNew = Math.floor(maxNew * (1 + ncbCombat / 100));
         let cards: Card[];
         if (deckId) {
@@ -581,7 +585,7 @@ export default function App() {
             const equippedIds = cardRepo.getEquippedDeckIds();
             let maxNew = player?.maxNewCardsPerDay ?? 20;
             if (player) {
-              const ncbReview = getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("new_card_bonus") ?? 0;
+              const ncbReview = getPlayerSkillEffects(player).get("new_card_bonus") ?? 0;
               if (ncbReview > 0) maxNew = Math.floor(maxNew * (1 + ncbReview / 100));
             }
             const { cardIds: dueIds } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 20);
@@ -886,8 +890,7 @@ export default function App() {
         }
 
         // Pre-compute skill tree scheduling bonuses once
-        const combatSkillAlloc: SkillAllocation = player ? { recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar } : { recall: 0, battle: 0, scholar: 0 };
-        const combatSkillFx = getAggregatedEffects(combatSkillAlloc);
+        const combatSkillFx = player ? getPlayerSkillEffects(player) : new Map();
         const combatRetBonus = combatSkillFx.get("retention_bonus") ?? 0;
         const combatStabBonus = combatSkillFx.get("stability_bonus") ?? 0;
         const combatRetention = Math.min(0.99, (player?.desiredRetention ?? 0.9) + combatRetBonus / 100);
@@ -1029,8 +1032,7 @@ export default function App() {
         };
 
         // Pre-compute skill tree scheduling bonuses once for review
-        const reviewSkillAlloc: SkillAllocation = { recall: updated.skillRecall, battle: updated.skillBattle, scholar: updated.skillScholar };
-        const reviewSkillFx = getAggregatedEffects(reviewSkillAlloc);
+        const reviewSkillFx = getPlayerSkillEffects(updated);
         const reviewRetBonus = reviewSkillFx.get("retention_bonus") ?? 0;
         const reviewStabBonus = reviewSkillFx.get("stability_bonus") ?? 0;
         const reviewRetention = Math.min(0.99, (player?.desiredRetention ?? 0.9) + reviewRetBonus / 100);
@@ -1111,8 +1113,7 @@ export default function App() {
         }
 
         // Compute skill tree effects for bonus calculations
-        const skillAlloc: SkillAllocation = { recall: updated.skillRecall, battle: updated.skillBattle, scholar: updated.skillScholar };
-        const skillEffects = getAggregatedEffects(skillAlloc);
+        const skillEffects = getPlayerSkillEffects(updated);
         const reviewXpBonusPct = skillEffects.get("review_xp_bonus") ?? 0;
         const wisdomXpBonusPct = skillEffects.get("wisdom_xp_bonus") ?? 0;
 
@@ -1467,7 +1468,7 @@ export default function App() {
               { ...getDefaultCombatSettings(), timerSeconds: player?.timerSeconds ?? 30 },
               player?.ascensionLevel ?? 0,
             ).timerSeconds}
-            hintBonus={player ? (getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("hint_bonus") ?? 0) : 0}
+            hintBonus={player ? (getPlayerSkillEffects(player).get("hint_bonus") ?? 0) : 0}
           />
         );
       case "review_summary":
