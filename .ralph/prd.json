@@ -36,7 +36,7 @@
         "Tests pass"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "getCardHealth() exists but is never called. FlashcardFace already has full UI for struggling/leech cards. Need to bridge the gap by computing health from attempt history."
     },
     {
