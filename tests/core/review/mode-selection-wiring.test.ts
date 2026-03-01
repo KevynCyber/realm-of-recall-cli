@@ -224,7 +224,7 @@ describe("getMajorityCardState", () => {
 
   it('returns "new" when all cards have no schedule (are new)', () => {
     const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
-    for (const c of cards) cardRepo.createCard(c);
+    for (const c of cards) cardRepo.insertCard(c);
     // No schedules recorded, so all cards are new
     expect(getMajorityCardState(cards, statsRepo)).toBe("new");
   });
@@ -232,7 +232,7 @@ describe("getMajorityCardState", () => {
   it('returns "review" when all cards have review schedule', () => {
     const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
     for (const c of cards) {
-      cardRepo.createCard(c);
+      cardRepo.insertCard(c);
       const schedule: ScheduleData = {
         cardId: c.id,
         difficulty: 5.0,
@@ -255,7 +255,7 @@ describe("getMajorityCardState", () => {
 
   it('returns "new" when >50% of cards are new', () => {
     const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
-    for (const c of cards) cardRepo.createCard(c);
+    for (const c of cards) cardRepo.insertCard(c);
     // Only c1 has a review schedule; c2, c3 are new (66% new)
     const schedule: ScheduleData = {
       cardId: "c1",
@@ -278,7 +278,7 @@ describe("getMajorityCardState", () => {
 
   it('returns "review" when <=50% of cards are new', () => {
     const cards = [makeCard("c1"), makeCard("c2")];
-    for (const c of cards) cardRepo.createCard(c);
+    for (const c of cards) cardRepo.insertCard(c);
     // c1 has review schedule, c2 is new (50% new, not >50%)
     const schedule: ScheduleData = {
       cardId: "c1",
