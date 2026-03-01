@@ -86,7 +86,8 @@ export function CombatScreen({
   onComplete,
 }: Props) {
   const theme = useGameTheme();
-  const stats = getEffectiveStats(player, equippedItems);
+  const skillAllocation = { recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar };
+  const stats = getEffectiveStats(player, equippedItems, skillAllocation);
   const parsedEffects = useMemo(() => parseEquipmentEffects(equippedItems), [equippedItems]);
 
   const [phase, setPhase] = useState<Phase>("encounter_preview");

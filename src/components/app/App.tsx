@@ -91,8 +91,8 @@ import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents
 import { playBel } from "../../core/ui/TerminalEffects.js";
 import { shouldTriggerOracleTrial, createOracleTrial, scoreOracleTrial, BASE_TRIAL_WXP } from "../../core/combat/OracleTrial.js";
 import type { OracleTrialResult } from "../../core/combat/OracleTrial.js";
-import { investInBranch } from "../../core/progression/SkillTree.js";
-import type { SkillBranch } from "../../core/progression/SkillTree.js";
+import { investInBranch, getAggregatedEffects } from "../../core/progression/SkillTree.js";
+import type { SkillBranch, SkillAllocation } from "../../core/progression/SkillTree.js";
 import { setTerminalTitle, clearTerminalTitle, notifyBel } from "../../utils/TerminalTitle.js";
 import {
   getBreakLevel,
@@ -341,7 +341,12 @@ export default function App() {
       const statsRepo = new StatsRepository(db);
       const playerRepo = new PlayerRepository(db);
       const p = playerRepo.getPlayer();
-      const maxNew = p?.maxNewCardsPerDay ?? 20;
+      let maxNew = p?.maxNewCardsPerDay ?? 20;
+      if (p) {
+        const sa = getAggregatedEffects({ recall: p.skillRecall, battle: p.skillBattle, scholar: p.skillScholar });
+        const ncb = sa.get("new_card_bonus") ?? 0;
+        if (ncb > 0) maxNew = Math.floor(maxNew * (1 + ncb / 100));
+      }
       const equippedIds = cardRepo.getEquippedDeckIds();
       const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
       setCardsDue(cardIds.length);
@@ -398,7 +403,9 @@ export default function App() {
         const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
         const equippedIds = cardRepo.getEquippedDeckIds();
-        const maxNew = p.maxNewCardsPerDay ?? 20;
+        let maxNew = p.maxNewCardsPerDay ?? 20;
+        const ncbInit = getAggregatedEffects({ recall: p.skillRecall, battle: p.skillBattle, scholar: p.skillScholar }).get("new_card_bonus") ?? 0;
+        if (ncbInit > 0) maxNew = Math.floor(maxNew * (1 + ncbInit / 100));
         const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
         setCardsDue(cardIds.length);
         setNewCardsRemaining(remaining);
@@ -504,7 +511,9 @@ export default function App() {
         const statsRepo = new StatsRepository(db);
         const equipRepo = new EquipmentRepository(db);
 
-        const maxNew = player.maxNewCardsPerDay ?? 20;
+        let maxNew = player.maxNewCardsPerDay ?? 20;
+        const ncbCombat = getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("new_card_bonus") ?? 0;
+        if (ncbCombat > 0) maxNew = Math.floor(maxNew * (1 + ncbCombat / 100));
         let cards: Card[];
         if (deckId) {
           // Zone-specific combat: pull from single deck with new card limit
@@ -570,7 +579,11 @@ export default function App() {
             const cardRepo = new CardRepository(db);
             const statsRepo = new StatsRepository(db);
             const equippedIds = cardRepo.getEquippedDeckIds();
-            const maxNew = player?.maxNewCardsPerDay ?? 20;
+            let maxNew = player?.maxNewCardsPerDay ?? 20;
+            if (player) {
+              const ncbReview = getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("new_card_bonus") ?? 0;
+              if (ncbReview > 0) maxNew = Math.floor(maxNew * (1 + ncbReview / 100));
+            }
             const { cardIds: dueIds } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 20);
             const cards = cardRepo.getCardsByIds(dueIds);
             if (cards.length === 0) break;
@@ -872,11 +885,18 @@ export default function App() {
           cardQualityMap.set(cr.cardId, cr.quality as AnswerQuality);
         }
 
+        // Pre-compute skill tree scheduling bonuses once
+        const combatSkillAlloc: SkillAllocation = player ? { recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar } : { recall: 0, battle: 0, scholar: 0 };
+        const combatSkillFx = getAggregatedEffects(combatSkillAlloc);
+        const combatRetBonus = combatSkillFx.get("retention_bonus") ?? 0;
+        const combatStabBonus = combatSkillFx.get("stability_bonus") ?? 0;
+        const combatRetention = Math.min(0.99, (player?.desiredRetention ?? 0.9) + combatRetBonus / 100);
+
         for (const card of combatCards.slice(0, result.cardsReviewed)) {
           const quality = cardQualityMap.get(card.id) ?? (result.victory ? AnswerQuality.Correct : AnswerQuality.Wrong);
           const existing = statsRepo.getSchedule(card.id);
-          const schedule: ScheduleData = existing ?? createInitialSchedule(card.id);
-          const updatedSchedule = updateSchedule(schedule, quality, undefined, player?.desiredRetention);
+          const schedule: ScheduleData = existing ?? createInitialSchedule(card.id, player?.wisdomXp, combatStabBonus);
+          const updatedSchedule = updateSchedule(schedule, quality, undefined, combatRetention);
 
           // Compute evolution tier
           const isCorrect = quality === AnswerQuality.Perfect || quality === AnswerQuality.Correct || quality === AnswerQuality.Partial;
@@ -1008,6 +1028,13 @@ export default function App() {
           totalCorrect: updated.totalCorrect + correctCount,
         };
 
+        // Pre-compute skill tree scheduling bonuses once for review
+        const reviewSkillAlloc: SkillAllocation = { recall: updated.skillRecall, battle: updated.skillBattle, scholar: updated.skillScholar };
+        const reviewSkillFx = getAggregatedEffects(reviewSkillAlloc);
+        const reviewRetBonus = reviewSkillFx.get("retention_bonus") ?? 0;
+        const reviewStabBonus = reviewSkillFx.get("stability_bonus") ?? 0;
+        const reviewRetention = Math.min(0.99, (player?.desiredRetention ?? 0.9) + reviewRetBonus / 100);
+
         // Update each card's FSRS schedule and compute retention bonuses
         const bonusCards: { cardId: string; multiplier: number }[] = [];
         const earnedVariants: Array<{ cardId: string; variant: "foil" | "golden" | "prismatic" }> = [];
@@ -1015,7 +1042,7 @@ export default function App() {
         for (const result of results) {
           const existing = statsRepo.getSchedule(result.cardId);
           const schedule: ScheduleData =
-            existing ?? createInitialSchedule(result.cardId);
+            existing ?? createInitialSchedule(result.cardId, updated.wisdomXp, reviewStabBonus);
 
           // Compute retention multiplier from days since last review (before updating)
           const isCorrect =
@@ -1036,7 +1063,7 @@ export default function App() {
             schedule,
             result.quality,
             result.confidence,
-            player?.desiredRetention,
+            reviewRetention,
           );
 
           // Compute evolution tier
@@ -1083,8 +1110,15 @@ export default function App() {
           }
         }
 
-        // Award XP for reviewing (Deep Focus perk: +10%) plus retention bonus
-        const baseReviewXp = results.length * 5 + retentionXpBonus;
+        // Compute skill tree effects for bonus calculations
+        const skillAlloc: SkillAllocation = { recall: updated.skillRecall, battle: updated.skillBattle, scholar: updated.skillScholar };
+        const skillEffects = getAggregatedEffects(skillAlloc);
+        const reviewXpBonusPct = skillEffects.get("review_xp_bonus") ?? 0;
+        const wisdomXpBonusPct = skillEffects.get("wisdom_xp_bonus") ?? 0;
+
+        // Award XP for reviewing (Deep Focus perk: +10%, skill tree bonus) plus retention bonus
+        let baseReviewXp = results.length * 5 + retentionXpBonus;
+        if (reviewXpBonusPct > 0) baseReviewXp = Math.floor(baseReviewXp * (1 + reviewXpBonusPct / 100));
         const xpGained = hasPerk(updated.wisdomXp, "deep_focus")
           ? Math.floor(baseReviewXp * 1.1)
           : baseReviewXp;
@@ -1093,7 +1127,8 @@ export default function App() {
         // Award bonus Wisdom XP for elaborative interrogation explanations (15 per explanation)
         const elaborationCount = results.filter((r) => r.elaborationText).length;
         if (elaborationCount > 0) {
-          const elaborationWisdomXp = elaborationCount * 15;
+          let elaborationWisdomXp = elaborationCount * 15;
+          if (wisdomXpBonusPct > 0) elaborationWisdomXp = Math.floor(elaborationWisdomXp * (1 + wisdomXpBonusPct / 100));
           updated = { ...updated, wisdomXp: updated.wisdomXp + elaborationWisdomXp };
         }
 
@@ -1143,8 +1178,9 @@ export default function App() {
           ).length;
           const trialResult = scoreOracleTrial(oraclePrediction, actualCorrect, oracleCardCount);
           setOracleTrialResult(trialResult);
-          // Award bonus wisdom XP
-          const trialWxp = Math.floor(BASE_TRIAL_WXP * trialResult.wxpMultiplier);
+          // Award bonus wisdom XP (with skill tree bonus)
+          let trialWxp = Math.floor(BASE_TRIAL_WXP * trialResult.wxpMultiplier);
+          if (wisdomXpBonusPct > 0) trialWxp = Math.floor(trialWxp * (1 + wisdomXpBonusPct / 100));
           const withTrialWxp = { ...updated, wisdomXp: updated.wisdomXp + trialWxp };
           playerRepo.updatePlayer(withTrialWxp);
           setPlayer(withTrialWxp);
@@ -1431,6 +1467,7 @@ export default function App() {
               { ...getDefaultCombatSettings(), timerSeconds: player?.timerSeconds ?? 30 },
               player?.ascensionLevel ?? 0,
             ).timerSeconds}
+            hintBonus={player ? (getAggregatedEffects({ recall: player.skillRecall, battle: player.skillBattle, scholar: player.skillScholar }).get("hint_bonus") ?? 0) : 0}
           />
         );
       case "review_summary":
