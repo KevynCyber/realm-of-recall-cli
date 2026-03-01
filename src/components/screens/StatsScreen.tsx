@@ -5,6 +5,7 @@ import type { Player } from "../../types/player.js";
 import { xpToNextLevel } from "../../core/progression/XPCalculator.js";
 import { getStreakBonus, getStreakTitle } from "../../core/progression/StreakTracker.js";
 import type { TrendResult } from "../../core/analytics/MarginalGains.js";
+import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPerks.js";
 
 interface DeckStat {
   name: string;
@@ -244,6 +245,32 @@ export function StatsScreen({
           <Text>
             Wisdom XP: <Text color="magenta">{wisdomXp}</Text>
           </Text>
+          {(() => {
+            const unlocked = getUnlockedPerks(wisdomXp);
+            if (unlocked.length === 0) {
+              const next = WISDOM_PERKS[0];
+              return (
+                <Text color={theme.colors.muted}>
+                  Next perk: {next.name} at {next.threshold} WXP
+                </Text>
+              );
+            }
+            return (
+              <>
+                <Text bold color="magenta">Perks:</Text>
+                {unlocked.map((perk) => (
+                  <Text key={perk.id}>
+                    <Text color={theme.colors.success}>{"\u2713"}</Text> {perk.name} — {perk.description}
+                  </Text>
+                ))}
+                {unlocked.length < WISDOM_PERKS.length && (
+                  <Text color={theme.colors.muted}>
+                    Next: {WISDOM_PERKS[unlocked.length].name} at {WISDOM_PERKS[unlocked.length].threshold} WXP
+                  </Text>
+                )}
+              </>
+            );
+          })()}
         </Box>
       )}
 

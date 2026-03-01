@@ -65,6 +65,7 @@ import {
 } from "../../core/analytics/MarginalGains.js";
 import { checkNewAchievements } from "../../core/progression/Achievements.js";
 import type { AchievementState } from "../../core/progression/Achievements.js";
+import { hasPerk } from "../../core/progression/WisdomPerks.js";
 import { interleaveCards } from "../../core/review/Interleaver.js";
 import { selectMode } from "../../core/review/ModeSelector.js";
 import {
@@ -848,8 +849,11 @@ export default function App() {
           );
         }
 
-        // Award XP for reviewing
-        const xpGained = results.length * 5;
+        // Award XP for reviewing (Deep Focus perk: +10%)
+        const baseReviewXp = results.length * 5;
+        const xpGained = hasPerk(updated.wisdomXp, "deep_focus")
+          ? Math.floor(baseReviewXp * 1.1)
+          : baseReviewXp;
         updated = { ...updated, xp: updated.xp + xpGained };
 
         const prevLevel = updated.level;
