@@ -149,4 +149,29 @@ describe("getEffectiveStats", () => {
     expect(stats.goldBonusPct).toBe(25 + 0 + 0 + 10);
     expect(stats.critChancePct).toBe(12 + 2 + 0 + 3);
   });
+
+  it("without skill allocation behaves the same as before", () => {
+    const player = createNewPlayer("Sage", PlayerClass.Scholar);
+    const noSkills = getEffectiveStats(player, []);
+    const emptySkills = getEffectiveStats(player, [], { recall: 0, battle: 0, scholar: 0 });
+    expect(noSkills).toEqual(emptySkills);
+  });
+
+  it("applies battle skill tree bonuses to attack, HP, and crit", () => {
+    const player = createNewPlayer("Sage", PlayerClass.Scholar);
+    // battle_1 costs 1 point: +5% attack; battle_2 costs 2 points: +10% HP
+    // So battle=3 unlocks tiers 1 and 2
+    const stats = getEffectiveStats(player, [], { recall: 0, battle: 3, scholar: 0 });
+    // Base attack is 8, +5% = floor(8 * 1.05) = 8
+    expect(stats.attack).toBe(Math.floor(8 * 1.05));
+    // Base HP is 80, +10% = floor(80 * 1.10) = 88
+    expect(stats.maxHp).toBe(Math.floor(80 * 1.10));
+  });
+
+  it("applies scholar skill tree gold bonus", () => {
+    const player = createNewPlayer("Sage", PlayerClass.Scholar);
+    // scholar=3 unlocks tiers 1 and 2; tier 2 gives +10% gold
+    const stats = getEffectiveStats(player, [], { recall: 0, battle: 0, scholar: 3 });
+    expect(stats.goldBonusPct).toBe(0 + 10); // Scholar class has 0 gold bonus + 10 from skill
+  });
 });

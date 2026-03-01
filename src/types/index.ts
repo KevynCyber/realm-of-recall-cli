@@ -30,6 +30,7 @@ export enum RetrievalMode {
   Reversed = "reversed",
   Teach = "teach",
   Connect = "connect",
+  Generate = "generate",
 }
 
 export interface Card {

@@ -67,5 +67,18 @@ export interface Player {
   combatWins: number;
   combatLosses: number;
   wisdomXp: number;
+  ascensionLevel: number;
+  skillPoints: number;
+  skillRecall: number;
+  skillBattle: number;
+  skillScholar: number;
+  dailyChallengeSeed: string | null;
+  dailyChallengeCompleted: boolean;
+  dailyChallengeScore: number;
+  dailyChallengeDate: string | null;
+  desiredRetention: number;
+  maxNewCardsPerDay: number;
+  timerSeconds: number;
+  lastLoginAt: string | null;
   createdAt: string;
 }

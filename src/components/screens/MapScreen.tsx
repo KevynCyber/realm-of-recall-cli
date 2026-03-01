@@ -3,6 +3,7 @@ import { Box, Text, useInput } from "ink";
 import { useGameTheme } from "../app/ThemeProvider.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import type { Zone } from "../../types/index.js";
+import type { AscensionModifier } from "../../core/progression/AscensionSystem.js";
 
 interface ZoneInfo {
   zone: Zone;
@@ -16,6 +17,10 @@ interface Props {
   zones: ZoneInfo[];
   onSelectZone: (zoneId: string) => void;
   onBack: () => void;
+  ascensionLevel?: number;
+  activeModifiers?: AscensionModifier[];
+  canAscend?: boolean;
+  onAscend?: () => void;
 }
 
 const STATUS_CLEARED = "\u2713"; // checkmark
@@ -34,7 +39,15 @@ function getStatusColor(zone: Zone, isUnlocked: boolean, theme: ReturnType<typeo
   return theme.colors.muted;
 }
 
-export function MapScreen({ zones, onSelectZone, onBack }: Props) {
+export function MapScreen({
+  zones,
+  onSelectZone,
+  onBack,
+  ascensionLevel = 0,
+  activeModifiers = [],
+  canAscend = false,
+  onAscend,
+}: Props) {
   const theme = useGameTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [lockedMessage, setLockedMessage] = useState<string | null>(null);
@@ -42,6 +55,11 @@ export function MapScreen({ zones, onSelectZone, onBack }: Props) {
   useInput((input, key) => {
     if (key.escape || input === "b") {
       onBack();
+      return;
+    }
+
+    if (input.toLowerCase() === "a" && canAscend && onAscend) {
+      onAscend();
       return;
     }
 
@@ -147,6 +165,28 @@ export function MapScreen({ zones, onSelectZone, onBack }: Props) {
       {lockedMessage && (
         <Box marginTop={1} paddingX={1}>
           <Text color={theme.colors.error}>{lockedMessage}</Text>
+        </Box>
+      )}
+
+      {/* Ascension panel */}
+      {ascensionLevel > 0 && (
+        <Box marginTop={1} borderStyle="single" flexDirection="column" paddingX={1}>
+          <Text bold color={theme.colors.epic}>
+            Ascension Level {ascensionLevel}
+          </Text>
+          {activeModifiers.map((mod) => (
+            <Text key={mod.level} color={theme.colors.damage}>
+              Lv{mod.level}: {mod.name} — {mod.description}
+            </Text>
+          ))}
+        </Box>
+      )}
+
+      {canAscend && (
+        <Box marginTop={1} paddingX={1}>
+          <Text bold color={theme.colors.epic}>
+            All zones cleared! Press [A] to begin Ascension {ascensionLevel + 1}
+          </Text>
         </Box>
       )}
 

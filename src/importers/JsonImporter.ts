@@ -1,22 +1,35 @@
 import fs from "fs";
 import crypto from "crypto";
+import { z } from "zod";
 import type { Card, Deck } from "../types/index.js";
 import { CardType } from "../types/index.js";
 
-interface JsonDeck {
-  name: string;
-  description?: string;
-  cards: Array<{
-    front: string;
-    back: string;
-    acceptableAnswers?: string[];
-    type?: string;
-  }>;
-}
+const JsonCardSchema = z.object({
+  front: z.string().min(1, "Card front must be a non-empty string"),
+  back: z.string().min(1, "Card back must be a non-empty string"),
+  acceptableAnswers: z.array(z.string()).optional(),
+  type: z.string().optional(),
+});
+
+const JsonDeckSchema = z.object({
+  name: z.string().min(1, "Deck name must be a non-empty string"),
+  description: z.string().optional(),
+  cards: z.array(JsonCardSchema).min(1, "Deck must contain at least one card"),
+});
+
+export type JsonDeck = z.infer<typeof JsonDeckSchema>;
 
 export function importJson(filePath: string): { deck: Deck; cards: Card[] } {
   const raw = fs.readFileSync(filePath, "utf-8");
-  const data: JsonDeck = JSON.parse(raw);
+  const parsed = JSON.parse(raw);
+  const result = JsonDeckSchema.safeParse(parsed);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((i) => `${i.path.join(".")}: ${i.message}`)
+      .join("; ");
+    throw new Error(`Invalid deck JSON: ${issues}`);
+  }
+  const data = result.data;
 
   const deckId = crypto.randomUUID();
   const deck: Deck = {

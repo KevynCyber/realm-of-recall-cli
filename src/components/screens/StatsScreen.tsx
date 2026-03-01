@@ -1,10 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useGameTheme } from "../app/ThemeProvider.js";
 import type { Player } from "../../types/player.js";
 import { xpToNextLevel } from "../../core/progression/XPCalculator.js";
 import { getStreakBonus, getStreakTitle } from "../../core/progression/StreakTracker.js";
 import type { TrendResult } from "../../core/analytics/MarginalGains.js";
+import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPerks.js";
+import { getAllUnlocks } from "../../core/progression/MetaUnlocks.js";
+import type { MetaUnlock } from "../../core/progression/MetaUnlocks.js";
+import type { CardRetentionSummary, SkipCostForecast } from "../../core/analytics/ForgettingCurve.js";
+import { getBranchInfo, getTotalPointsSpent } from "../../core/progression/SkillTree.js";
+import type { SkillBranch, SkillAllocation } from "../../core/progression/SkillTree.js";
 
 interface DeckStat {
   name: string;
@@ -20,16 +26,39 @@ interface FsrsStats {
   relearnCount: number;
 }
 
+/** Valid desired retention presets */
+const RETENTION_PRESETS = [0.70, 0.75, 0.80, 0.85, 0.90, 0.92, 0.95, 0.97] as const;
+
+/** Valid max new cards per day presets */
+const NEW_CARDS_PRESETS = [5, 10, 15, 20, 30, 50, 100, 9999] as const;
+
+/** Valid answer timer presets (0 = disabled) */
+const TIMER_PRESETS = [15, 20, 30, 45, 60, 0] as const;
+
+interface VariantCounts {
+  foil: number;
+  golden: number;
+  prismatic: number;
+}
+
 interface Props {
   player: Player;
   deckStats: DeckStat[];
   fsrsStats: FsrsStats;
   onBack: () => void;
+  onUpdateRetention?: (retention: number) => void;
+  onUpdateMaxNewCards?: (maxNewCards: number) => void;
+  onUpdateTimer?: (timerSeconds: number) => void;
   // Ultra-learner props (all optional for backward compat)
   accuracyTrend?: TrendResult;
   speedTrend?: TrendResult;
   consistencyGrid?: string;
   wisdomXp?: number;
+  variantCounts?: VariantCounts;
+  unlockedKeys?: Set<string>;
+  retentionSummary?: CardRetentionSummary;
+  avgSkipCost?: SkipCostForecast;
+  onInvestSkill?: (branch: SkillBranch) => void;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -50,16 +79,70 @@ export function StatsScreen({
   deckStats,
   fsrsStats,
   onBack,
+  onUpdateRetention,
+  onUpdateMaxNewCards,
+  onUpdateTimer,
   accuracyTrend,
   speedTrend,
   consistencyGrid,
   wisdomXp,
+  variantCounts,
+  unlockedKeys,
+  retentionSummary,
+  avgSkipCost,
+  onInvestSkill,
 }: Props) {
   const theme = useGameTheme();
+  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer" | "skills">("retention");
 
   useInput((input, key) => {
     if (key.escape || input === "b") {
       onBack();
+      return;
+    }
+
+    // Switch settings tab
+    if (input === "r" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
+      setSettingsTab("retention");
+      return;
+    }
+    if (input === "n" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
+      setSettingsTab("newcards");
+      return;
+    }
+    if (input === "t" && (onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer)) {
+      setSettingsTab("timer");
+      return;
+    }
+    if (input === "k" && onInvestSkill) {
+      setSettingsTab("skills");
+      return;
+    }
+
+    const num = parseInt(input, 10);
+    // Skill tree investment: [1] Recall, [2] Battle, [3] Scholar
+    if (settingsTab === "skills" && onInvestSkill && num >= 1 && num <= 3) {
+      const branches: SkillBranch[] = ["recall", "battle", "scholar"];
+      onInvestSkill(branches[num - 1]);
+      return;
+    }
+    if (settingsTab === "timer" && onUpdateTimer && num >= 1 && num <= TIMER_PRESETS.length) {
+      const newTimer = TIMER_PRESETS[num - 1];
+      if (newTimer !== player.timerSeconds) {
+        onUpdateTimer(newTimer);
+      }
+    } else if (num >= 1 && num <= 8) {
+      if (settingsTab === "retention" && onUpdateRetention) {
+        const newRetention = RETENTION_PRESETS[num - 1];
+        if (newRetention !== player.desiredRetention) {
+          onUpdateRetention(newRetention);
+        }
+      } else if (settingsTab === "newcards" && onUpdateMaxNewCards) {
+        const newMax = NEW_CARDS_PRESETS[num - 1];
+        if (newMax !== player.maxNewCardsPerDay) {
+          onUpdateMaxNewCards(newMax);
+        }
+      }
     }
   });
 
@@ -121,6 +204,33 @@ export function StatsScreen({
         </Text>
       </Box>
 
+      {/* Section — Memory Health (Forgetting Curve) */}
+      {retentionSummary && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color="magenta">
+            Memory Health
+          </Text>
+          <Text>
+            <Text color={theme.colors.success}>{"\u2713"} Healthy: {retentionSummary.healthy}</Text>
+            {"  "}
+            <Text color={theme.colors.warning}>{"\u26A0"} At Risk: {retentionSummary.atRisk}</Text>
+            {"  "}
+            <Text color={theme.colors.error}>{"\u2717"} Critical: {retentionSummary.critical}</Text>
+          </Text>
+          {avgSkipCost && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>Avg retention if you skip sessions:</Text>
+              <Text>
+                {"  "}Today: <Text bold>{avgSkipCost.today.toFixed(0)}%</Text>
+                {"  "}+1 day: <Text color={avgSkipCost.skip1 >= 70 ? theme.colors.success : avgSkipCost.skip1 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip1.toFixed(0)}%</Text>
+                {"  "}+3 days: <Text color={avgSkipCost.skip3 >= 70 ? theme.colors.success : avgSkipCost.skip3 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip3.toFixed(0)}%</Text>
+                {"  "}+7 days: <Text color={avgSkipCost.skip7 >= 70 ? theme.colors.success : avgSkipCost.skip7 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip7.toFixed(0)}%</Text>
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
       {/* Section 4 — Streaks */}
       <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
         <Text bold color={theme.colors.streakFire}>
@@ -155,7 +265,23 @@ export function StatsScreen({
         )}
       </Box>
 
-      {/* Section 6 — Progress Trends (Ultra-Learner) */}
+      {/* Section 6 — Collection (Rare Variants) */}
+      {variantCounts && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.rare}>
+            Collection
+          </Text>
+          <Text>
+            <Text color="cyan">{"\u2726"} {variantCounts.foil} Foil</Text>
+            <Text>{" | "}</Text>
+            <Text color="yellow">{"\u2605"} {variantCounts.golden} Golden</Text>
+            <Text>{" | "}</Text>
+            <Text color="magenta">{"\u25C6"} {variantCounts.prismatic} Prismatic</Text>
+          </Text>
+        </Box>
+      )}
+
+      {/* Section 7 — Progress Trends (Ultra-Learner) */}
       {accuracyTrend && (
         <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
           <Text bold color={theme.colors.xp}>
@@ -193,6 +319,234 @@ export function StatsScreen({
           <Text>
             Wisdom XP: <Text color="magenta">{wisdomXp}</Text>
           </Text>
+          {(() => {
+            const unlocked = getUnlockedPerks(wisdomXp);
+            if (unlocked.length === 0) {
+              const next = WISDOM_PERKS[0];
+              return (
+                <Text color={theme.colors.muted}>
+                  Next perk: {next.name} at {next.threshold} WXP
+                </Text>
+              );
+            }
+            return (
+              <>
+                <Text bold color="magenta">Perks:</Text>
+                {unlocked.map((perk) => (
+                  <Text key={perk.id}>
+                    <Text color={theme.colors.success}>{"\u2713"}</Text> {perk.name} — {perk.description}
+                  </Text>
+                ))}
+                {unlocked.length < WISDOM_PERKS.length && (
+                  <Text color={theme.colors.muted}>
+                    Next: {WISDOM_PERKS[unlocked.length].name} at {WISDOM_PERKS[unlocked.length].threshold} WXP
+                  </Text>
+                )}
+              </>
+            );
+          })()}
+        </Box>
+      )}
+
+      {/* Section — Meta-Progression */}
+      {unlockedKeys !== undefined && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.rare}>
+            Meta-Progression
+          </Text>
+          {getAllUnlocks().map((unlock: MetaUnlock) => {
+            const isUnlocked = unlockedKeys.has(unlock.key);
+            return (
+              <Text key={unlock.key}>
+                <Text color={isUnlocked ? theme.colors.success : theme.colors.muted}>
+                  {isUnlocked ? "\u2713" : "\u2717"} {unlock.name}
+                </Text>
+                <Text color={theme.colors.muted}>
+                  {" "}(Ascension {unlock.requiredAscension})
+                </Text>
+              </Text>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* Section 9 — Settings */}
+      {(onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer) && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Box marginBottom={1}>
+            <Text bold={settingsTab === "retention"} color={settingsTab === "retention" ? theme.colors.rare : theme.colors.muted}>
+              [R] Retention
+            </Text>
+            <Text>{"  "}</Text>
+            <Text bold={settingsTab === "newcards"} color={settingsTab === "newcards" ? theme.colors.rare : theme.colors.muted}>
+              [N] New Cards/Day
+            </Text>
+            <Text>{"  "}</Text>
+            <Text bold={settingsTab === "timer"} color={settingsTab === "timer" ? theme.colors.rare : theme.colors.muted}>
+              [T] Timer
+            </Text>
+            {onInvestSkill && (
+              <>
+                <Text>{"  "}</Text>
+                <Text bold={settingsTab === "skills"} color={settingsTab === "skills" ? theme.colors.rare : theme.colors.muted}>
+                  [K] Skills
+                </Text>
+              </>
+            )}
+          </Box>
+
+          {settingsTab === "retention" && onUpdateRetention && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Desired Retention
+              </Text>
+              <Text color={theme.colors.muted}>
+                Higher = more frequent reviews, stronger memory. Lower = fewer reviews, more forgetting.
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{(player.desiredRetention * 100).toFixed(0)}%</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {RETENTION_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.desiredRetention;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {(preset * 100).toFixed(0)}%
+                        {preset === 0.90 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
+
+          {settingsTab === "newcards" && onUpdateMaxNewCards && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Max New Cards Per Day
+              </Text>
+              <Text color={theme.colors.muted}>
+                Limits how many never-seen cards are introduced each day. Review cards are always shown.
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{player.maxNewCardsPerDay === 9999 ? "Unlimited" : player.maxNewCardsPerDay}</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {NEW_CARDS_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.maxNewCardsPerDay;
+                  const label = preset === 9999 ? "Unlimited" : `${preset}`;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {label}
+                        {preset === 20 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
+
+          {settingsTab === "skills" && onInvestSkill && (
+            (() => {
+              const allocation: SkillAllocation = {
+                recall: player.skillRecall,
+                battle: player.skillBattle,
+                scholar: player.skillScholar,
+              };
+              const spent = getTotalPointsSpent(allocation);
+              const available = player.skillPoints - spent;
+              const branches: SkillBranch[] = ["recall", "battle", "scholar"];
+              const branchColors = { recall: "cyan", battle: "red", scholar: "magenta" };
+
+              return (
+                <>
+                  <Text bold color={theme.colors.rare}>
+                    Skill Tree
+                  </Text>
+                  <Text>
+                    Skill Points: <Text bold color={available > 0 ? theme.colors.success : theme.colors.muted}>{available}</Text>
+                    <Text color={theme.colors.muted}> ({spent} spent of {player.skillPoints} total)</Text>
+                  </Text>
+                  <Box marginTop={1} flexDirection="column">
+                    {branches.map((branch, i) => {
+                      const info = getBranchInfo(branch, allocation);
+                      const tierBar = Array.from({ length: info.maxTier }, (_, t) =>
+                        t < info.currentTier ? "\u2588" : "\u2591"
+                      ).join("");
+                      const canInvest = info.nextCost !== null && available >= info.nextCost;
+                      return (
+                        <Box key={branch} flexDirection="column" marginBottom={1}>
+                          <Text>
+                            <Text bold color={branchColors[branch]}>
+                              [{i + 1}] {info.branchName}
+                            </Text>
+                            <Text> {tierBar} </Text>
+                            <Text color={theme.colors.muted}>Tier {info.currentTier}/{info.maxTier}</Text>
+                            {info.nextCost !== null && (
+                              <Text color={canInvest ? theme.colors.success : theme.colors.muted}>
+                                {" "}(next: {info.nextCost} pts{canInvest ? " - ready!" : ""})
+                              </Text>
+                            )}
+                            {info.nextCost === null && (
+                              <Text color={theme.colors.gold}> MAX</Text>
+                            )}
+                          </Text>
+                          {info.nodes.filter(n => n.tier <= info.currentTier).map(node => (
+                            <Text key={node.id} color={theme.colors.muted}>
+                              {"  "}<Text color={theme.colors.success}>{"\u2713"}</Text> {node.name}: {node.description}
+                            </Text>
+                          ))}
+                          {info.currentTier < info.maxTier && (
+                            <Text color={theme.colors.muted}>
+                              {"  "}<Text color={theme.colors.warning}>{"\u25CB"}</Text> Next: {info.nodes[info.currentTier].name} — {info.nodes[info.currentTier].description}
+                            </Text>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                  {available > 0 && (
+                    <Text color={theme.colors.success}>Press [1-3] to invest in a branch</Text>
+                  )}
+                </>
+              );
+            })()
+          )}
+
+          {settingsTab === "timer" && onUpdateTimer && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Answer Timer
+              </Text>
+              <Text color={theme.colors.muted}>
+                Time allowed per card. Off disables the timer entirely (accessibility).
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{player.timerSeconds === 0 ? "Off" : `${player.timerSeconds}s`}</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {TIMER_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.timerSeconds;
+                  const label = preset === 0 ? "Off" : `${preset}s`;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {label}
+                        {preset === 30 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
         </Box>
       )}
 
@@ -200,6 +554,9 @@ export function StatsScreen({
       <Box paddingX={1}>
         <Text color={theme.colors.muted}>
           Press <Text bold>Esc</Text> or <Text bold>b</Text> to go back
+          {(onUpdateRetention || onUpdateMaxNewCards || onUpdateTimer) ? (
+            <Text>{" | "}<Text bold>{settingsTab === "skills" ? "1-3" : settingsTab === "timer" ? `1-${TIMER_PRESETS.length}` : "1-8"}</Text> to change setting{" | "}<Text bold>R/N/T{onInvestSkill ? "/K" : ""}</Text> to switch tab</Text>
+          ) : null}
         </Text>
       </Box>
     </Box>

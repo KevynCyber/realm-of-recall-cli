@@ -12,6 +12,7 @@ import {
   ConfidenceLevel,
   type ScheduleData,
 } from "../../types/index.js";
+import { hasPerk } from "../progression/WisdomPerks.js";
 
 /**
  * FSRS spaced repetition scheduler.
@@ -64,15 +65,41 @@ const STRING_TO_STATE: Record<ScheduleData["state"], State> = {
   relearning: State.Relearning,
 };
 
-// Module-level FSRS instance with fuzz enabled
-const f = fsrs(generatorParameters({ enable_fuzz: true }));
+// Default FSRS instance with fuzz enabled (retention 0.9)
+const defaultFsrs = fsrs(generatorParameters({ enable_fuzz: true }));
 
-export function createInitialSchedule(cardId: string): ScheduleData {
+/**
+ * Create an FSRS instance with a specific desired retention.
+ * Caches instances to avoid re-creating for the same value.
+ */
+const fsrsCache = new Map<number, ReturnType<typeof fsrs>>();
+
+function getFsrsInstance(desiredRetention?: number): ReturnType<typeof fsrs> {
+  if (desiredRetention === undefined || desiredRetention === 0.9) {
+    return defaultFsrs;
+  }
+  const cached = fsrsCache.get(desiredRetention);
+  if (cached) return cached;
+  const instance = fsrs(
+    generatorParameters({ enable_fuzz: true, request_retention: desiredRetention }),
+  );
+  fsrsCache.set(desiredRetention, instance);
+  return instance;
+}
+
+export function createInitialSchedule(cardId: string, wisdomXp?: number, stabilityBonusPct: number = 0): ScheduleData {
   const now = new Date();
+  let stability = wisdomXp !== undefined && hasPerk(wisdomXp, "quick_learner") ? 1.1 : 0;
+  if (stabilityBonusPct > 0) {
+    stability = Math.max(stability, stabilityBonusPct / 100);
+    if (wisdomXp !== undefined && hasPerk(wisdomXp, "quick_learner")) {
+      stability = 1.1 * (1 + stabilityBonusPct / 100);
+    }
+  }
   return {
     cardId,
     difficulty: 0,
-    stability: 0,
+    stability,
     reps: 0,
     lapses: 0,
     state: "new",
@@ -85,9 +112,11 @@ export function updateSchedule(
   schedule: ScheduleData,
   quality: AnswerQuality,
   confidence?: ConfidenceLevel,
+  desiredRetention?: number,
 ): ScheduleData {
   const rating = getEffectiveRating(quality, confidence);
   const now = new Date();
+  const f = getFsrsInstance(desiredRetention);
 
   // Reconstruct a ts-fsrs Card from our ScheduleData
   const card: FSRSCard = {
@@ -152,5 +181,5 @@ export function getRetrievability(schedule: ScheduleData): number {
       : undefined,
   };
 
-  return f.get_retrievability(card, new Date(), false);
+  return defaultFsrs.get_retrievability(card, new Date(), false);
 }

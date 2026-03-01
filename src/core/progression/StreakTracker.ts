@@ -1,5 +1,10 @@
 import type { Player } from "../../types/player.js";
 
+export interface StreakUpdateResult {
+  player: Player;
+  message: string | null;
+}
+
 /**
  * Subtract one day from a YYYY-MM-DD date string.
  */
@@ -14,29 +19,54 @@ export function getYesterday(todayUTC: string): string {
 }
 
 /**
+ * Calculate how many days to deduct from a streak on a missed day.
+ * Formula: min(5, floor(streak / 4))
+ * Returns 0 if streak is 0.
+ */
+export function calculateStreakDecay(currentStreak: number): number {
+  if (currentStreak <= 0) return 0;
+  return Math.min(5, Math.floor(currentStreak / 4));
+}
+
+/**
+ * Calculate earn-back days: half the deducted days, rounded down, minimum 1.
+ * Only applies when player missed exactly one day and comes back the next day.
+ */
+export function calculateEarnBack(decayAmount: number): number {
+  if (decayAmount <= 0) return 0;
+  return Math.max(1, Math.floor(decayAmount / 2));
+}
+
+/**
  * Pure function: given the current player state and today's date,
- * returns an updated player with the streak correctly tracked.
+ * returns an updated player with the streak correctly tracked,
+ * along with an optional message for UI display.
  *
  * Rules:
  *  - Same day review: no change.
  *  - First ever review (lastReviewDate is null): streak = 1.
  *  - Consecutive day (lastReviewDate === yesterday): increment streak.
  *  - Missed day with shield: consume one shield, treat as consecutive.
- *  - Missed day without shield: reset streak to 1.
+ *  - Missed day without shield: apply decay (deduct min(5, floor(streak/4)) days).
+ *    If exactly one day was missed, earn-back recovers half the deducted days.
+ *    If streak reaches 0 after decay, reset to 1 (today counts as a new start).
  */
-export function updateStreak(player: Player, todayUTC: string): Player {
+export function updateStreak(player: Player, todayUTC: string): StreakUpdateResult {
   // Already studied today — nothing to update
   if (player.lastReviewDate === todayUTC) {
-    return player;
+    return { player, message: null };
   }
 
   // First-ever review
   if (player.lastReviewDate === null) {
     return {
-      ...player,
-      streakDays: 1,
-      longestStreak: Math.max(player.longestStreak, 1),
-      lastReviewDate: todayUTC,
+      player: {
+        ...player,
+        streakDays: 1,
+        longestStreak: Math.max(player.longestStreak, 1),
+        lastReviewDate: todayUTC,
+      },
+      message: null,
     };
   }
 
@@ -46,10 +76,13 @@ export function updateStreak(player: Player, todayUTC: string): Player {
   if (player.lastReviewDate === yesterday) {
     const newStreak = player.streakDays + 1;
     return {
-      ...player,
-      streakDays: newStreak,
-      longestStreak: Math.max(player.longestStreak, newStreak),
-      lastReviewDate: todayUTC,
+      player: {
+        ...player,
+        streakDays: newStreak,
+        longestStreak: Math.max(player.longestStreak, newStreak),
+        lastReviewDate: todayUTC,
+      },
+      message: null,
     };
   }
 
@@ -57,20 +90,50 @@ export function updateStreak(player: Player, todayUTC: string): Player {
   if (player.shieldCount > 0) {
     const newStreak = player.streakDays + 1;
     return {
-      ...player,
-      streakDays: newStreak,
-      longestStreak: Math.max(player.longestStreak, newStreak),
-      shieldCount: player.shieldCount - 1,
-      lastReviewDate: todayUTC,
+      player: {
+        ...player,
+        streakDays: newStreak,
+        longestStreak: Math.max(player.longestStreak, newStreak),
+        shieldCount: player.shieldCount - 1,
+        lastReviewDate: todayUTC,
+      },
+      message: null,
     };
   }
 
-  // Missed day(s) with no shields — reset
+  // Missed day(s) with no shields — apply decay instead of hard reset
+  const oldStreak = player.streakDays;
+  const decay = calculateStreakDecay(oldStreak);
+
+  // Check if exactly one day was missed (lastReviewDate === day before yesterday)
+  const dayBeforeYesterday = getYesterday(yesterday);
+  const missedExactlyOneDay = player.lastReviewDate === dayBeforeYesterday;
+
+  // Calculate earn-back if player missed exactly one day
+  const earnBack = missedExactlyOneDay ? calculateEarnBack(decay) : 0;
+
+  let newStreak = oldStreak - decay + earnBack;
+
+  // Build the message
+  let message: string | null;
+  if (newStreak > 0) {
+    message = `Streak reduced to ${newStreak} days (was ${oldStreak})`;
+    // Increment by 1 for today's review
+    newStreak += 1;
+  } else {
+    // Streak fully decayed — start fresh
+    newStreak = 1;
+    message = "Streak lost";
+  }
+
   return {
-    ...player,
-    streakDays: 1,
-    longestStreak: Math.max(player.longestStreak, player.streakDays),
-    lastReviewDate: todayUTC,
+    player: {
+      ...player,
+      streakDays: newStreak,
+      longestStreak: Math.max(player.longestStreak, oldStreak),
+      lastReviewDate: todayUTC,
+    },
+    message,
   };
 }
 

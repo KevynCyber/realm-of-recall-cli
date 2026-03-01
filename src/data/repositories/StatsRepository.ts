@@ -154,6 +154,19 @@ export class StatsRepository {
     };
   }
 
+  getAllSchedules(): Array<{ cardId: string; stability: number; lastReview: string | null }> {
+    const rows = this.db
+      .prepare(
+        `SELECT card_id, stability, last_review_at FROM recall_stats WHERE suspended = 0 AND (buried_until IS NULL OR buried_until <= datetime('now'))`,
+      )
+      .all() as any[];
+    return rows.map((r) => ({
+      cardId: r.card_id,
+      stability: r.stability ?? 0,
+      lastReview: r.last_review_at,
+    }));
+  }
+
   getCardEvolutionTier(cardId: string): number {
     const row = this.db
       .prepare(`SELECT evolution_tier FROM recall_stats WHERE card_id = ?`)
@@ -161,11 +174,45 @@ export class StatsRepository {
     return row ? row.evolution_tier : 0;
   }
 
+  getCardEvolutionStats(cardId: string): {
+    consecutiveCorrect: number;
+    currentTier: number;
+    fsrsState: string;
+    stability: number;
+    lapses: number;
+  } {
+    const row = this.db
+      .prepare(
+        `SELECT consecutive_correct, evolution_tier, card_state, stability, lapses
+         FROM recall_stats WHERE card_id = ?`,
+      )
+      .get(cardId) as any | undefined;
+    if (!row) {
+      return { consecutiveCorrect: 0, currentTier: 0, fsrsState: "new", stability: 0, lapses: 0 };
+    }
+    return {
+      consecutiveCorrect: row.consecutive_correct,
+      currentTier: row.evolution_tier,
+      fsrsState: row.card_state,
+      stability: row.stability,
+      lapses: row.lapses,
+    };
+  }
+
   getCardGapStreak(cardId: string): number {
     const row = this.db
       .prepare(`SELECT gap_streak FROM recall_stats WHERE card_id = ?`)
       .get(cardId) as any | undefined;
     return row ? row.gap_streak : 0;
+  }
+
+  getCardHealthData(cardId: string): { recentQualities: string[]; totalLapses: number } {
+    const recentQualities = this.getRecentQualities(cardId, 5);
+    const schedule = this.getSchedule(cardId);
+    return {
+      recentQualities,
+      totalLapses: schedule?.lapses ?? 0,
+    };
   }
 
   getRecentQualities(cardId: string, limit = 5): string[] {
@@ -216,6 +263,7 @@ export class StatsRepository {
 
   getDueCardIds(deckId?: string | string[]): string[] {
     const now = new Date().toISOString();
+    const suspendBuryFilter = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
     let query: string;
     let params: any[];
 
@@ -227,26 +275,29 @@ export class StatsRepository {
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id IN (${placeholders})
           AND (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [...deckId, now];
+      params = [...deckId, now, now];
     } else if (deckId) {
       query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id = ?
           AND (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [deckId, now];
+      params = [deckId, now, now];
     } else {
       query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
-        WHERE rs.next_review_at IS NULL OR rs.next_review_at <= ?
+        WHERE (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [now];
+      params = [now, now];
     }
 
     const rows = this.db.prepare(query).all(...params) as any[];
@@ -256,6 +307,9 @@ export class StatsRepository {
   getDueCards(deckId?: string | string[], limit?: number): string[] {
     const now = new Date().toISOString();
     const effectiveLimit = limit ?? 9999;
+    const suspendBuryJoin = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
+    // For the new-card branch (LEFT JOIN), cards without stats are not suspended/buried
+    const suspendBuryNew = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
 
     if (Array.isArray(deckId)) {
       if (deckId.length === 0) return [];
@@ -267,16 +321,18 @@ export class StatsRepository {
           WHERE c.deck_id IN (${placeholders})
             AND rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE c.deck_id IN (${placeholders})
             AND (rs.card_state IS NULL OR rs.card_state = 'new')
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(...deckId, now, ...deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(...deckId, now, now, ...deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else if (deckId) {
       const query = `
@@ -286,16 +342,18 @@ export class StatsRepository {
           WHERE c.deck_id = ?
             AND rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE c.deck_id = ?
             AND (rs.card_state IS NULL OR rs.card_state = 'new')
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(deckId, now, deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(deckId, now, now, deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else {
       const query = `
@@ -304,15 +362,17 @@ export class StatsRepository {
           JOIN recall_stats rs ON rs.card_id = c.id
           WHERE rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE rs.card_state IS NULL OR rs.card_state = 'new'
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(now, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(now, now, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     }
   }
@@ -381,6 +441,17 @@ export class StatsRepository {
     };
   }
 
+  getMasteredCount(deckId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM recall_stats rs
+         JOIN cards c ON c.id = rs.card_id
+         WHERE c.deck_id = ? AND rs.evolution_tier >= 3`,
+      )
+      .get(deckId) as any;
+    return row.count;
+  }
+
   getAttempts(cardId: string): RecallAttempt[] {
     const rows = this.db
       .prepare(
@@ -396,6 +467,234 @@ export class StatsRepository {
     }));
   }
 
+  /**
+   * Count new cards that were first seen (had their first attempt) today.
+   */
+  getNewCardsSeenToday(deckId?: string | string[]): number {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartMs = todayStart.getTime();
+
+    let query: string;
+    let params: any[];
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return 0;
+      const placeholders = deckId.map(() => "?").join(",");
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        JOIN cards c ON c.id = ra.card_id
+        WHERE c.deck_id IN (${placeholders})
+          AND ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [...deckId, todayStartMs, todayStartMs];
+    } else if (deckId) {
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        JOIN cards c ON c.id = ra.card_id
+        WHERE c.deck_id = ?
+          AND ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [deckId, todayStartMs, todayStartMs];
+    } else {
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        WHERE ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [todayStartMs, todayStartMs];
+    }
+
+    const row = this.db.prepare(query).get(...params) as any;
+    return row.count;
+  }
+
+  /**
+   * Get due cards with a limit on new (never-seen) cards.
+   * Review/learning/relearning cards are always included (up to overall limit).
+   * New cards are capped at maxNewCards minus new cards already seen today.
+   */
+  getDueCardsWithNewLimit(
+    deckId: string | string[] | undefined,
+    maxNewCards: number,
+    overallLimit?: number,
+  ): { cardIds: string[]; newCardsRemaining: number } {
+    const effectiveOverallLimit = overallLimit ?? 9999;
+
+    // Count how many new cards were already introduced today
+    const seenToday = this.getNewCardsSeenToday(deckId);
+    const newCardBudget = Math.max(0, maxNewCards - seenToday);
+
+    // Get all review cards (non-new, due now)
+    const reviewCardIds = this.getReviewDueCards(deckId);
+
+    // Get new cards (capped at budget)
+    const newCardIds = this.getNewCardIds(deckId, newCardBudget);
+
+    // Combine: review cards first (they're time-sensitive), then new cards
+    const combined = [...reviewCardIds, ...newCardIds];
+    const limited = combined.slice(0, effectiveOverallLimit);
+
+    return {
+      cardIds: limited,
+      newCardsRemaining: newCardBudget - newCardIds.length,
+    };
+  }
+
+  /**
+   * Get IDs of review/learning/relearning cards that are currently due.
+   * Excludes new cards.
+   */
+  private getReviewDueCards(deckId?: string | string[]): string[] {
+    const now = new Date().toISOString();
+    const suspendBuryFilter = `AND rs.suspended = 0 AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id IN (${placeholders})
+          AND rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(...deckId, now, now) as any[];
+      return rows.map((r) => r.id);
+    } else if (deckId) {
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id = ?
+          AND rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(deckId, now, now) as any[];
+      return rows.map((r) => r.id);
+    } else {
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(now, now) as any[];
+      return rows.map((r) => r.id);
+    }
+  }
+
+  /**
+   * Get IDs of new cards (never reviewed), limited to `limit`.
+   */
+  private getNewCardIds(deckId?: string | string[], limit?: number): string[] {
+    const effectiveLimit = limit ?? 9999;
+    if (effectiveLimit <= 0) return [];
+    const now = new Date().toISOString();
+    const suspendBuryFilter = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id IN (${placeholders})
+          AND (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(...deckId, now, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else if (deckId) {
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id = ?
+          AND (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(deckId, now, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else {
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(now, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    }
+  }
+
+  suspendCard(cardId: string): void {
+    this.ensureStatsExist(cardId);
+    this.db
+      .prepare(`UPDATE recall_stats SET suspended = 1 WHERE card_id = ?`)
+      .run(cardId);
+  }
+
+  unsuspendCard(cardId: string): void {
+    this.db
+      .prepare(`UPDATE recall_stats SET suspended = 0 WHERE card_id = ?`)
+      .run(cardId);
+  }
+
+  buryCard(cardId: string): void {
+    this.ensureStatsExist(cardId);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    this.db
+      .prepare(`UPDATE recall_stats SET buried_until = ? WHERE card_id = ?`)
+      .run(tomorrow.toISOString(), cardId);
+  }
+
+  getSuspendedCount(deckId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM recall_stats rs
+         JOIN cards c ON c.id = rs.card_id
+         WHERE c.deck_id = ? AND rs.suspended = 1`,
+      )
+      .get(deckId) as any;
+    return row.count;
+  }
+
+  unsuspendAll(deckId: string): void {
+    this.db
+      .prepare(
+        `UPDATE recall_stats SET suspended = 0
+         WHERE card_id IN (SELECT id FROM cards WHERE deck_id = ?)`,
+      )
+      .run(deckId);
+  }
+
   getTotalReviewed(): number {
     const row = this.db
       .prepare("SELECT COUNT(DISTINCT card_id) as count FROM recall_attempts")
@@ -408,5 +707,79 @@ export class StatsRepository {
       .prepare("SELECT COUNT(*) as count FROM recall_attempts")
       .get() as any;
     return row.count;
+  }
+
+  /**
+   * Get overdue card IDs (cards past their next_review_at, non-new state).
+   * Ordered by stability DESC so highest-stability cards come first
+   * (most likely to still be remembered — ideal for gentle catch-up).
+   * Excludes suspended and buried cards.
+   */
+  getOverdueCardIds(): string[] {
+    const now = new Date().toISOString();
+    const query = `
+      SELECT c.id FROM cards c
+      JOIN recall_stats rs ON rs.card_id = c.id
+      WHERE rs.card_state != 'new'
+        AND rs.next_review_at <= ?
+        AND (rs.suspended IS NULL OR rs.suspended = 0)
+        AND (rs.buried_until IS NULL OR rs.buried_until <= ?)
+      ORDER BY rs.stability DESC
+    `;
+    const rows = this.db.prepare(query).all(now, now) as any[];
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Get the most recent review timestamp across all cards (milliseconds).
+   * Returns null if no reviews have been recorded.
+   */
+  getLastReviewTimestamp(): number | null {
+    const row = this.db
+      .prepare("SELECT MAX(timestamp) as ts FROM recall_attempts")
+      .get() as any;
+    return row?.ts ?? null;
+  }
+
+  /**
+   * Award a variant to a card. Only sets the variant if it is currently NULL.
+   */
+  awardVariant(cardId: string, variant: string): void {
+    this.ensureStatsExist(cardId);
+    this.db
+      .prepare(
+        `UPDATE recall_stats SET variant = ? WHERE card_id = ? AND variant IS NULL`,
+      )
+      .run(variant, cardId);
+  }
+
+  /**
+   * Get the current variant for a card (null if none).
+   */
+  getCardVariant(cardId: string): string | null {
+    const row = this.db
+      .prepare(`SELECT variant FROM recall_stats WHERE card_id = ?`)
+      .get(cardId) as any | undefined;
+    return row?.variant ?? null;
+  }
+
+  /**
+   * Get counts of each variant type across all cards.
+   */
+  getVariantCounts(): { foil: number; golden: number; prismatic: number } {
+    const rows = this.db
+      .prepare(
+        `SELECT variant, COUNT(*) as count FROM recall_stats WHERE variant IS NOT NULL GROUP BY variant`,
+      )
+      .all() as any[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[row.variant] = row.count;
+    }
+    return {
+      foil: counts["foil"] ?? 0,
+      golden: counts["golden"] ?? 0,
+      prismatic: counts["prismatic"] ?? 0,
+    };
   }
 }

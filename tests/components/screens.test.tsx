@@ -38,6 +38,19 @@ function makePlayer(overrides: Partial<Player> = {}): Player {
     combatWins: 30,
     combatLosses: 10,
     wisdomXp: 0,
+    ascensionLevel: 0,
+    skillPoints: 0,
+    skillRecall: 0,
+    skillBattle: 0,
+    skillScholar: 0,
+    dailyChallengeSeed: null,
+    dailyChallengeCompleted: false,
+    dailyChallengeScore: 0,
+    dailyChallengeDate: null,
+    desiredRetention: 0.9,
+    maxNewCardsPerDay: 20,
+    timerSeconds: 30,
+    lastLoginAt: null,
     createdAt: "2026-02-01",
     ...overrides,
   };
@@ -78,9 +91,11 @@ describe("HubScreen", () => {
     const frame = lastFrame();
     expect(frame).toContain("Adventure");
     expect(frame).toContain("Quick Review");
+    expect(frame).toContain("Dungeon Run");
+    expect(frame).toContain("Daily Challenge");
     expect(frame).toContain("Inventory");
     expect(frame).toContain("World Map");
-    expect(frame).toContain("Import Deck");
+    expect(frame).toContain("Achievements");
     expect(frame).toContain("Stats");
     expect(frame).toContain("Manage Decks");
   });
@@ -132,7 +147,7 @@ describe("HubScreen", () => {
   });
 
   it("navigates to correct screen for each number key", async () => {
-    const screens = ["combat", "review", "inventory", "map", "import", "stats", "decks"];
+    const screens = ["combat", "review", "dungeon", "daily_challenge", "inventory", "map", "achievements", "stats", "decks"];
     for (let i = 0; i < screens.length; i++) {
       const onNavigate = vi.fn();
       const { stdin } = render(
@@ -269,6 +284,40 @@ describe("StatsScreen", () => {
     await delay();
     stdin.write("b");
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it("renders Collection section with variant counts", () => {
+    const onBack = vi.fn();
+    const variantCounts = { foil: 12, golden: 3, prismatic: 0 };
+    const { lastFrame } = render(
+      themed(
+        <StatsScreen
+          player={makePlayer()}
+          deckStats={[]}
+          fsrsStats={fsrsStats}
+          onBack={onBack}
+          variantCounts={variantCounts}
+        />,
+      ),
+    );
+    const frame = lastFrame();
+    expect(frame).toContain("Collection");
+    expect(frame).toContain("12 Foil");
+    expect(frame).toContain("3 Golden");
+    expect(frame).toContain("0 Prismatic");
+    expect(frame).toContain("\u2726");
+    expect(frame).toContain("\u2605");
+    expect(frame).toContain("\u25C6");
+  });
+
+  it("does not render Collection section when variantCounts is not provided", () => {
+    const onBack = vi.fn();
+    const { lastFrame } = render(
+      themed(
+        <StatsScreen player={makePlayer()} deckStats={[]} fsrsStats={fsrsStats} onBack={onBack} />,
+      ),
+    );
+    expect(lastFrame()).not.toContain("Collection");
   });
 });
 

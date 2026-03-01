@@ -14,7 +14,7 @@ export function getDatabase(dbPath?: string): Database.Database {
   const resolvedPath = dbPath ?? DB_PATH;
   const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
   db = new Database(resolvedPath);
@@ -203,6 +203,99 @@ const migrations = [
       );
 
       CREATE INDEX idx_reflections_date ON session_reflections(created_at);
+    `,
+  },
+  {
+    name: "005_perfect_game",
+    sql: `
+      CREATE TABLE achievements (
+        id TEXT PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        unlocked_at TEXT
+      );
+
+      ALTER TABLE player ADD COLUMN ascension_level INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_points INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_seed TEXT;
+      ALTER TABLE player ADD COLUMN daily_challenge_completed INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_score INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN daily_challenge_date TEXT;
+
+      CREATE TABLE random_events (
+        id TEXT PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        data TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `,
+  },
+  {
+    name: "006_desired_retention",
+    sql: `ALTER TABLE player ADD COLUMN desired_retention REAL NOT NULL DEFAULT 0.9;`,
+  },
+  {
+    name: "007_max_new_cards_per_day",
+    sql: `ALTER TABLE player ADD COLUMN max_new_cards_per_day INTEGER NOT NULL DEFAULT 20;`,
+  },
+  {
+    name: "008_suspension_bury",
+    sql: `
+      ALTER TABLE recall_stats ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recall_stats ADD COLUMN buried_until TEXT;
+    `,
+  },
+  {
+    name: "009_timer_seconds",
+    sql: `ALTER TABLE player ADD COLUMN timer_seconds INTEGER NOT NULL DEFAULT 30;`,
+  },
+  {
+    name: "010_last_login_at",
+    sql: `ALTER TABLE player ADD COLUMN last_login_at TEXT;`,
+  },
+  {
+    name: "011_card_variants",
+    sql: `ALTER TABLE recall_stats ADD COLUMN variant TEXT DEFAULT NULL;`,
+  },
+  {
+    name: "012_enemy_encounters",
+    sql: `
+      CREATE TABLE enemy_encounters (
+        id INTEGER PRIMARY KEY,
+        enemy_name TEXT NOT NULL,
+        enemy_tier INTEGER NOT NULL,
+        times_defeated INTEGER DEFAULT 0,
+        first_defeated_at TEXT,
+        last_defeated_at TEXT,
+        UNIQUE(enemy_name, enemy_tier)
+      );
+    `,
+  },
+  {
+    name: "013_unlocks",
+    sql: `
+      CREATE TABLE unlocks (
+        id INTEGER PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        unlocked_at TEXT DEFAULT NULL
+      );
+    `,
+  },
+  {
+    name: "014_attempts_composite_index",
+    sql: `CREATE INDEX IF NOT EXISTS idx_attempts_card_ts ON recall_attempts(card_id, timestamp);`,
+  },
+  {
+    name: "015_due_cards_covering_index",
+    sql: `CREATE INDEX IF NOT EXISTS idx_stats_due_cards ON recall_stats(suspended, buried_until, next_review_at, card_state);`,
+  },
+  {
+    name: "016_skill_tree_columns",
+    sql: `
+      ALTER TABLE player ADD COLUMN skill_recall INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_battle INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_scholar INTEGER NOT NULL DEFAULT 0;
     `,
   },
 ];

@@ -67,4 +67,12 @@ describe("CardEvaluator", () => {
     const card = makeCard("Paris");
     expect(evaluateAnswer(card, null as any, 3, 30)).toBe(AnswerQuality.Timeout);
   });
+
+  it("accepts card.back even when not in acceptableAnswers", () => {
+    // Create a card where acceptableAnswers does NOT include the back value
+    const card = makeCard("Paris", ["City of Light", "Paree"]);
+    // card.back is "Paris" but acceptableAnswers only has alternatives
+    expect(evaluateAnswer(card, "Paris", 3, 30)).toBe(AnswerQuality.Correct);
+    expect(evaluateAnswer(card, "paris", 0.5, 30)).toBe(AnswerQuality.Perfect);
+  });
 });

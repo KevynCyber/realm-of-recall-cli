@@ -32,6 +32,11 @@ export interface CombatEvent {
   description: string;
 }
 
+export interface CombatCardResult {
+  cardId: string;
+  quality: string; // AnswerQuality value — avoids circular import with index.ts
+}
+
 export interface CombatResult {
   victory: boolean;
   xpEarned: number;
@@ -41,4 +46,6 @@ export interface CombatResult {
   cardsReviewed: number;
   perfectCount: number;
   correctCount: number;
+  playerHpRemaining: number;
+  cardResults: CombatCardResult[];
 }

@@ -57,6 +57,61 @@ describe("FlashcardFace", () => {
     const { lastFrame } = render(<FlashcardFace card={card} showAnswer={true} />);
     expect(lastFrame()).toContain("Paris");
   });
+
+  it("renders foil variant with sparkle symbols and cyan border color", () => {
+    const card = makeCard();
+    const { lastFrame } = render(
+      <FlashcardFace card={card} showAnswer={false} variant="foil" />,
+    );
+    const frame = lastFrame();
+    // ✦ flanking the title
+    expect(frame).toContain("\u2726");
+    expect(frame).toContain("Question");
+  });
+
+  it("renders golden variant with star symbols", () => {
+    const card = makeCard();
+    const { lastFrame } = render(
+      <FlashcardFace card={card} showAnswer={false} variant="golden" />,
+    );
+    const frame = lastFrame();
+    // ★ flanking the title
+    expect(frame).toContain("\u2605");
+    expect(frame).toContain("Question");
+  });
+
+  it("renders prismatic variant with diamond symbols", () => {
+    const card = makeCard();
+    const { lastFrame } = render(
+      <FlashcardFace card={card} showAnswer={false} variant="prismatic" />,
+    );
+    const frame = lastFrame();
+    // ◆ flanking the title
+    expect(frame).toContain("\u25C6");
+    expect(frame).toContain("Question");
+  });
+
+  it("renders without variant symbols when variant is null", () => {
+    const card = makeCard();
+    const { lastFrame } = render(
+      <FlashcardFace card={card} showAnswer={false} variant={null} />,
+    );
+    const frame = lastFrame();
+    expect(frame).not.toContain("\u2726");
+    expect(frame).not.toContain("\u25C6");
+    expect(frame).toContain("Question");
+  });
+
+  it("renders without variant symbols when variant prop is omitted", () => {
+    const card = makeCard();
+    const { lastFrame } = render(
+      <FlashcardFace card={card} showAnswer={false} />,
+    );
+    const frame = lastFrame();
+    expect(frame).not.toContain("\u2726");
+    expect(frame).not.toContain("\u25C6");
+    expect(frame).toContain("Question");
+  });
 });
 
 describe("ReviewSummary", () => {
@@ -135,8 +190,9 @@ describe("ReviewSummary", () => {
       <ReviewSummary results={[]} leveledUp={true} newLevel={5} />,
     );
     const frame = lastFrame();
-    expect(frame).toContain("LEVEL UP!");
     expect(frame).toContain("level 5");
+    // ASCII art LEVEL UP banner is rendered with ANSI formatting
+    expect(frame).toContain("___|");
   });
 
   it("does not render XP/gold when not provided", () => {
@@ -144,5 +200,37 @@ describe("ReviewSummary", () => {
     const frame = lastFrame();
     expect(frame).not.toContain("XP earned");
     expect(frame).not.toContain("Gold:");
+  });
+
+  it("renders NEW VARIANT! notification for foil variant", () => {
+    const newVariants = [{ cardId: "card-1", variant: "foil" as const }];
+    const { lastFrame } = render(<ReviewSummary results={[]} newVariants={newVariants} />);
+    const frame = lastFrame();
+    expect(frame).toContain("NEW VARIANT!");
+    expect(frame).toContain("Foil");
+    expect(frame).toContain("\u2726");
+  });
+
+  it("renders NEW VARIANT! notification for golden variant", () => {
+    const newVariants = [{ cardId: "card-1", variant: "golden" as const }];
+    const { lastFrame } = render(<ReviewSummary results={[]} newVariants={newVariants} />);
+    const frame = lastFrame();
+    expect(frame).toContain("NEW VARIANT!");
+    expect(frame).toContain("Golden");
+    expect(frame).toContain("\u2605");
+  });
+
+  it("renders NEW VARIANT! notification for prismatic variant", () => {
+    const newVariants = [{ cardId: "card-1", variant: "prismatic" as const }];
+    const { lastFrame } = render(<ReviewSummary results={[]} newVariants={newVariants} />);
+    const frame = lastFrame();
+    expect(frame).toContain("NEW VARIANT!");
+    expect(frame).toContain("Prismatic");
+    expect(frame).toContain("\u25C6");
+  });
+
+  it("does not render NEW VARIANT! when no variants earned", () => {
+    const { lastFrame } = render(<ReviewSummary results={[]} newVariants={[]} />);
+    expect(lastFrame()).not.toContain("NEW VARIANT!");
   });
 });

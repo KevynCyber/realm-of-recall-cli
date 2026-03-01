@@ -43,9 +43,7 @@ export function ReviewCommand({ deckId, limit }: Props) {
         const sliced = limit ? allCards.slice(0, limit) : allCards;
         setCards(sliced);
       } else {
-        const dueCards = dueIds
-          .map((id) => cardRepo.getCard(id))
-          .filter((c): c is Card => c !== undefined);
+        const dueCards = cardRepo.getCardsByIds(dueIds);
         const sliced = limit ? dueCards.slice(0, limit) : dueCards;
         setCards(sliced);
       }

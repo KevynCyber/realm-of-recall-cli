@@ -14,11 +14,24 @@ type BorderStyleName =
   | "classic"
   | "arrow";
 
+const TIER_NAMES = ["New", "Learned", "Proven", "Mastered"];
+
+export type CardVariantType = "foil" | "golden" | "prismatic" | null;
+
+const VARIANT_STYLES: Record<string, { borderColor: string; symbol: string }> = {
+  foil: { borderColor: "cyan", symbol: "\u2726" },       // ✦
+  golden: { borderColor: "yellow", symbol: "\u2605" },    // ★
+  prismatic: { borderColor: "magenta", symbol: "\u25C6" }, // ◆
+};
+
 interface Props {
   card: Card;
   showAnswer: boolean;
   evolutionTier?: number;
   cardHealth?: "healthy" | "struggling" | "leech";
+  consecutiveCorrect?: number;
+  isRetry?: boolean;
+  variant?: CardVariantType;
 }
 
 export function FlashcardFace({
@@ -26,6 +39,9 @@ export function FlashcardFace({
   showAnswer,
   evolutionTier,
   cardHealth,
+  consecutiveCorrect,
+  isRetry,
+  variant,
 }: Props) {
   const isCloze = card.type === CardType.ClozeDeletion;
   const frontText = isCloze ? parseCloze(card.front).displayText : card.front;
@@ -42,11 +58,35 @@ export function FlashcardFace({
   }
   if (tier >= 1) stars = "\u2605".repeat(tier);
 
-  // Health overrides
+  // Variant overrides border color
+  const variantStyle = variant ? VARIANT_STYLES[variant] : null;
+  if (variantStyle) {
+    borderColor = variantStyle.borderColor;
+  }
+
+  // Health color overrides
+  const healthColor =
+    cardHealth === "leech" ? "red" :
+    cardHealth === "struggling" ? "yellow" :
+    tier >= 3 ? "magenta" :
+    tier >= 2 ? "yellow" :
+    tier >= 1 ? "green" :
+    undefined;
+
   if (cardHealth === "struggling") borderColor = "yellow";
   if (cardHealth === "leech") borderColor = "red";
 
   const headerLabel = showAnswer ? "Answer" : "Question";
+  const variantPrefix = variantStyle ? `${variantStyle.symbol} ` : "";
+  const variantSuffix = variantStyle ? ` ${variantStyle.symbol}` : "";
+  const tierName = TIER_NAMES[Math.min(tier, 3)];
+
+  // Evolution progress bar (simple ASCII)
+  const progressThresholds = [0, 3, 7, 12]; // correct answers per tier
+  const currentThreshold = progressThresholds[Math.min(tier, 3)] ?? 12;
+  const nextThreshold = progressThresholds[Math.min(tier + 1, 3)] ?? 12;
+  const cc = consecutiveCorrect ?? 0;
+  const progressInTier = tier >= 3 ? 1 : Math.min(1, cc / Math.max(1, nextThreshold));
 
   return (
     <Box
@@ -56,20 +96,52 @@ export function FlashcardFace({
       paddingX={2}
       paddingY={1}
     >
-      <Text bold color={borderColor}>
-        {headerLabel}
-        {stars ? ` ${stars}` : ""}
-      </Text>
+      <Box>
+        <Text bold color={borderColor}>
+          {variantPrefix}{headerLabel}{variantSuffix}
+          {stars ? ` ${stars}` : ""}
+        </Text>
+        {tier > 0 && (
+          <Text dimColor> [{tierName}]</Text>
+        )}
+        {isRetry && (
+          <Text color="yellow" bold> [Retry]</Text>
+        )}
+      </Box>
       <Text>{showAnswer ? card.back : frontText}</Text>
+
+      {/* Evolution progress */}
+      {tier < 3 && tier > 0 && (
+        <Box marginTop={1}>
+          <Text dimColor>Evolution: </Text>
+          <Text color={healthColor}>
+            {renderMiniBar(progressInTier, 10)}
+          </Text>
+          <Text dimColor> {tierName} {"\u2192"} {TIER_NAMES[Math.min(tier + 1, 3)]}</Text>
+        </Box>
+      )}
+
       {tier >= 3 && (
-        <Text dimColor>MASTERED</Text>
+        <Text color="magenta" bold>MASTERED</Text>
       )}
       {cardHealth === "struggling" && (
-        <Text color="yellow">{"\u26A0"} Struggling</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="yellow">{"\u26A0"} Struggling</Text>
+          <Text color="yellow" dimColor>This card needs more practice. Try explaining it in your own words.</Text>
+        </Box>
       )}
       {cardHealth === "leech" && (
-        <Text color="red">{"\u2716"} Leech {"\u2014"} needs deeper study</Text>
+        <Box marginTop={1} flexDirection="column">
+          <Text color="red">{"\u2716"} Leech Card</Text>
+          <Text color="red" dimColor>This card keeps tripping you up. Break it into simpler parts or try a mnemonic.</Text>
+        </Box>
       )}
     </Box>
   );
+}
+
+function renderMiniBar(pct: number, width: number): string {
+  const filled = Math.round(pct * width);
+  const empty = width - filled;
+  return "\u2588".repeat(filled) + "\u2591".repeat(empty);
 }

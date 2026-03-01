@@ -28,6 +28,19 @@ const testPlayer: Player = {
   combatWins: 0,
   combatLosses: 0,
   wisdomXp: 0,
+  ascensionLevel: 0,
+  skillPoints: 0,
+  skillRecall: 0,
+  skillBattle: 0,
+  skillScholar: 0,
+  dailyChallengeSeed: null,
+  dailyChallengeCompleted: false,
+  dailyChallengeScore: 0,
+  dailyChallengeDate: null,
+  desiredRetention: 0.9,
+  maxNewCardsPerDay: 20,
+  timerSeconds: 30,
+  lastLoginAt: null,
   createdAt: new Date().toISOString(),
 };
 
@@ -90,5 +103,62 @@ describe("PlayerRepository", () => {
     playerRepo.removeGold(999);
     const player = playerRepo.getPlayer();
     expect(player!.gold).toBe(0);
+  });
+
+  it("persists desiredRetention with default value", () => {
+    playerRepo.createPlayer(testPlayer);
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.9);
+  });
+
+  it("persists custom desiredRetention value", () => {
+    playerRepo.createPlayer({ ...testPlayer, desiredRetention: 0.85 });
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.85);
+  });
+
+  it("updates desiredRetention", () => {
+    playerRepo.createPlayer(testPlayer);
+    playerRepo.updatePlayer({ ...testPlayer, desiredRetention: 0.95 });
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.95);
+  });
+
+  it("persists maxNewCardsPerDay with default value", () => {
+    playerRepo.createPlayer(testPlayer);
+    const player = playerRepo.getPlayer();
+    expect(player!.maxNewCardsPerDay).toBe(20);
+  });
+
+  it("persists custom maxNewCardsPerDay value", () => {
+    playerRepo.createPlayer({ ...testPlayer, maxNewCardsPerDay: 10 });
+    const player = playerRepo.getPlayer();
+    expect(player!.maxNewCardsPerDay).toBe(10);
+  });
+
+  it("updates maxNewCardsPerDay", () => {
+    playerRepo.createPlayer(testPlayer);
+    playerRepo.updatePlayer({ ...testPlayer, maxNewCardsPerDay: 50 });
+    const player = playerRepo.getPlayer();
+    expect(player!.maxNewCardsPerDay).toBe(50);
+  });
+
+  it("persists timerSeconds with default value", () => {
+    playerRepo.createPlayer(testPlayer);
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(30);
+  });
+
+  it("persists custom timerSeconds value", () => {
+    playerRepo.createPlayer({ ...testPlayer, timerSeconds: 45 });
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(45);
+  });
+
+  it("updates timerSeconds", () => {
+    playerRepo.createPlayer(testPlayer);
+    playerRepo.updatePlayer({ ...testPlayer, timerSeconds: 0 });
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(0);
   });
 });

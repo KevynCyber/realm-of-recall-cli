@@ -13,8 +13,11 @@ export function evaluateAnswer(
   const trimmed = (playerAnswer ?? "").trim();
   if (trimmed.length === 0) return AnswerQuality.Timeout;
 
+  // Include card.back alongside acceptableAnswers so the canonical answer is always accepted
+  const allAcceptable = [card.back, ...card.acceptableAnswers];
+
   // Exact match (case-insensitive)
-  for (const acceptable of card.acceptableAnswers) {
+  for (const acceptable of allAcceptable) {
     if (trimmed.toLowerCase() === acceptable.toLowerCase()) {
       return responseTime < INSTANT_THRESHOLD
         ? AnswerQuality.Perfect
@@ -23,7 +26,7 @@ export function evaluateAnswer(
   }
 
   // Partial match (substring in either direction)
-  for (const acceptable of card.acceptableAnswers) {
+  for (const acceptable of allAcceptable) {
     if (
       acceptable.toLowerCase().includes(trimmed.toLowerCase()) ||
       trimmed.toLowerCase().includes(acceptable.toLowerCase())

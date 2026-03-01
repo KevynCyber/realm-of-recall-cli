@@ -30,6 +30,19 @@ export class PlayerRepository {
       combatWins: row.combat_wins,
       combatLosses: row.combat_losses,
       wisdomXp: row.wisdom_xp ?? 0,
+      ascensionLevel: row.ascension_level ?? 0,
+      skillPoints: row.skill_points ?? 0,
+      skillRecall: row.skill_recall ?? 0,
+      skillBattle: row.skill_battle ?? 0,
+      skillScholar: row.skill_scholar ?? 0,
+      dailyChallengeSeed: row.daily_challenge_seed ?? null,
+      dailyChallengeCompleted: !!(row.daily_challenge_completed ?? 0),
+      dailyChallengeScore: row.daily_challenge_score ?? 0,
+      dailyChallengeDate: row.daily_challenge_date ?? null,
+      desiredRetention: row.desired_retention ?? 0.9,
+      maxNewCardsPerDay: row.max_new_cards_per_day ?? 20,
+      timerSeconds: row.timer_seconds ?? 30,
+      lastLoginAt: row.last_login_at ?? null,
       createdAt: row.created_at,
     };
   }
@@ -39,8 +52,12 @@ export class PlayerRepository {
       .prepare(
         `INSERT INTO player (id, name, class, level, xp, hp, max_hp, attack, defense, gold,
           streak_days, longest_streak, last_review_date, shield_count,
-          total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp,
+          ascension_level, skill_points, skill_recall, skill_battle, skill_scholar,
+          daily_challenge_seed, daily_challenge_completed,
+          daily_challenge_score, daily_challenge_date, desired_retention, max_new_cards_per_day,
+          timer_seconds, last_login_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         player.id,
@@ -62,6 +79,19 @@ export class PlayerRepository {
         player.combatWins,
         player.combatLosses,
         player.wisdomXp,
+        player.ascensionLevel,
+        player.skillPoints,
+        player.skillRecall,
+        player.skillBattle,
+        player.skillScholar,
+        player.dailyChallengeSeed,
+        player.dailyChallengeCompleted ? 1 : 0,
+        player.dailyChallengeScore,
+        player.dailyChallengeDate,
+        player.desiredRetention,
+        player.maxNewCardsPerDay,
+        player.timerSeconds,
+        player.lastLoginAt,
         player.createdAt,
       );
   }
@@ -73,7 +103,11 @@ export class PlayerRepository {
           name = ?, class = ?, level = ?, xp = ?, hp = ?, max_hp = ?,
           attack = ?, defense = ?, gold = ?, streak_days = ?, longest_streak = ?,
           last_review_date = ?, shield_count = ?, total_reviews = ?, total_correct = ?,
-          combat_wins = ?, combat_losses = ?, wisdom_xp = ?, created_at = ?
+          combat_wins = ?, combat_losses = ?, wisdom_xp = ?, ascension_level = ?,
+          skill_points = ?, skill_recall = ?, skill_battle = ?, skill_scholar = ?,
+          daily_challenge_seed = ?, daily_challenge_completed = ?,
+          daily_challenge_score = ?, daily_challenge_date = ?, desired_retention = ?,
+          max_new_cards_per_day = ?, timer_seconds = ?, last_login_at = ?, created_at = ?
          WHERE id = 1`,
       )
       .run(
@@ -95,6 +129,19 @@ export class PlayerRepository {
         player.combatWins,
         player.combatLosses,
         player.wisdomXp,
+        player.ascensionLevel,
+        player.skillPoints,
+        player.skillRecall,
+        player.skillBattle,
+        player.skillScholar,
+        player.dailyChallengeSeed,
+        player.dailyChallengeCompleted ? 1 : 0,
+        player.dailyChallengeScore,
+        player.dailyChallengeDate,
+        player.desiredRetention,
+        player.maxNewCardsPerDay,
+        player.timerSeconds,
+        player.lastLoginAt,
         player.createdAt,
       );
   }

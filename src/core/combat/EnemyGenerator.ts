@@ -2,7 +2,7 @@
 
 import { EnemyTier, type Enemy } from "../../types/combat.js";
 
-const NAME_POOLS: Record<EnemyTier, string[]> = {
+export const NAME_POOLS: Record<EnemyTier, string[]> = {
   [EnemyTier.Minion]: ["Slime", "Bat", "Rat", "Beetle", "Wisp"],
   [EnemyTier.Common]: ["Goblin", "Skeleton", "Spider", "Wolf", "Bandit"],
   [EnemyTier.Elite]: ["Knight", "Dark Mage", "Assassin", "Golem", "Wraith"],

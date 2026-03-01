@@ -5,20 +5,27 @@ import { useGameTheme } from "../app/ThemeProvider.js";
 interface Props {
   cardsDue: number;
   streakAtRisk: boolean;
+  newCardsRemaining: number;
+  idleBanner?: string | null;
+  newUnlockName?: string | null;
   onNavigate: (screen: string) => void;
 }
 
 const MENU_ITEMS = [
   { key: "1", label: "Adventure", description: "Enter a zone and battle enemies", screen: "combat" },
   { key: "2", label: "Quick Review", description: "Review due cards without combat", screen: "review" },
-  { key: "3", label: "Inventory", description: "Manage your equipment", screen: "inventory" },
-  { key: "4", label: "World Map", description: "View zone progression", screen: "map" },
-  { key: "5", label: "Import Deck", description: "Add new flashcard decks", screen: "import" },
-  { key: "6", label: "Stats", description: "View your statistics", screen: "stats" },
-  { key: "7", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
+  { key: "3", label: "Dungeon Run", description: "5-floor gauntlet with random events", screen: "dungeon" },
+  { key: "4", label: "Daily Challenge", description: "Today's seeded challenge", screen: "daily_challenge" },
+  { key: "5", label: "Inventory", description: "Manage your equipment", screen: "inventory" },
+  { key: "6", label: "World Map", description: "View zone progression", screen: "map" },
+  { key: "7", label: "Achievements", description: "Track your accomplishments", screen: "achievements" },
+  { key: "8", label: "Stats", description: "View your statistics", screen: "stats" },
+  { key: "9", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
+  { key: "0", label: "Create Cards", description: "Author new flashcards", screen: "create_cards" },
+  { key: "b", label: "Bestiary", description: "Enemy encounters and collection", screen: "bestiary" },
 ] as const;
 
-export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {
+export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanner, newUnlockName, onNavigate }: Props) {
   const theme = useGameTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -30,15 +37,28 @@ export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {
     } else if (key.return) {
       onNavigate(MENU_ITEMS[selectedIndex].screen);
     } else {
-      const num = parseInt(input, 10);
-      if (num >= 1 && num <= MENU_ITEMS.length) {
-        onNavigate(MENU_ITEMS[num - 1].screen);
+      // Match by key shortcut (number or letter)
+      const match = MENU_ITEMS.find((item) => item.key === input);
+      if (match) {
+        onNavigate(match.screen);
       }
     }
   });
 
   return (
     <Box flexDirection="column">
+      {idleBanner && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text color={theme.colors.gold}>{idleBanner}</Text>
+        </Box>
+      )}
+      {newUnlockName && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text bold color="magenta">
+            New Unlock! {newUnlockName}
+          </Text>
+        </Box>
+      )}
       <Box borderStyle="round" flexDirection="column" paddingX={1}>
         <Text bold>Realm of Recall</Text>
         <Box marginTop={1} flexDirection="column">
@@ -65,6 +85,12 @@ export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {
           </Text>
         </Box>
       )}
+
+      <Box paddingX={1}>
+        <Text color={theme.colors.mana}>
+          {newCardsRemaining} new cards remaining today
+        </Text>
+      </Box>
 
       {streakAtRisk && (
         <Box paddingX={1}>

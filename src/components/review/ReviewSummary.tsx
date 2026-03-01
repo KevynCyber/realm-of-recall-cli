@@ -1,12 +1,31 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { AnswerQuality } from "../../types/index.js";
+import { AnswerQuality, ConfidenceLevel } from "../../types/index.js";
+import { LEVEL_UP_ART } from "../../core/ui/TerminalEffects.js";
+import { calculateSessionCalibration } from "../../core/analytics/CalibrationFeedback.js";
 
 interface ReviewResult {
   cardId: string;
   quality: AnswerQuality;
   responseTime: number;
+  confidence?: ConfidenceLevel;
 }
+
+export interface RetentionBonusCard {
+  cardId: string;
+  multiplier: number;
+}
+
+export interface NewVariantNotification {
+  cardId: string;
+  variant: "foil" | "golden" | "prismatic";
+}
+
+const VARIANT_DISPLAY: Record<string, { symbol: string; color: string; label: string }> = {
+  foil: { symbol: "\u2726", color: "cyan", label: "Foil" },       // ✦
+  golden: { symbol: "\u2605", color: "yellow", label: "Golden" },  // ★
+  prismatic: { symbol: "\u25C6", color: "magenta", label: "Prismatic" }, // ◆
+};
 
 interface Props {
   results: ReviewResult[];
@@ -14,9 +33,11 @@ interface Props {
   goldEarned?: number;
   leveledUp?: boolean;
   newLevel?: number;
+  retentionBonusCards?: RetentionBonusCard[];
+  newVariants?: NewVariantNotification[];
 }
 
-export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel }: Props) {
+export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel, retentionBonusCards, newVariants }: Props) {
   const total = results.length;
   const perfect = results.filter(
     (r) => r.quality === AnswerQuality.Perfect,
@@ -73,8 +94,59 @@ export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLev
       {goldEarned !== undefined && (
         <Text color="yellow">Gold: +{goldEarned}</Text>
       )}
+      {retentionBonusCards && retentionBonusCards.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="cyan">
+            Long-term Recall Bonus!
+          </Text>
+          {retentionBonusCards.map((b) => (
+            <Text key={b.cardId} color="cyan">
+              {`  Card ${b.cardId.slice(0, 8)}... (${b.multiplier}x)`}
+            </Text>
+          ))}
+        </Box>
+      )}
+      {newVariants && newVariants.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          {newVariants.map((v) => {
+            const display = VARIANT_DISPLAY[v.variant];
+            return (
+              <Text key={v.cardId} bold color={display.color}>
+                {display.symbol} NEW VARIANT! {display.label} {display.symbol}
+              </Text>
+            );
+          })}
+        </Box>
+      )}
+      {/* Metacognitive Calibration Feedback */}
+      {(() => {
+        const withConfidence = results.filter((r): r is typeof r & { confidence: ConfidenceLevel } => !!r.confidence);
+        if (withConfidence.length < 3) return null;
+        const cal = calculateSessionCalibration(withConfidence);
+        return (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold>Calibration:</Text>
+            {cal.buckets.map((b) => (
+              <Text key={b.confidence} dimColor>
+                {`  ${b.confidence}: ${(b.accuracy * 100).toFixed(0)}% correct (${b.correctCards}/${b.totalCards})`}
+              </Text>
+            ))}
+            {cal.overconfidenceMessage && (
+              <Text color="yellow">{cal.overconfidenceMessage}</Text>
+            )}
+            {cal.underconfidenceMessage && (
+              <Text color="cyan">{cal.underconfidenceMessage}</Text>
+            )}
+          </Box>
+        );
+      })()}
       {leveledUp && newLevel !== undefined && (
-        <Text bold color="yellow">LEVEL UP! You are now level {newLevel}!</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {LEVEL_UP_ART.map((line, i) => (
+            <Text key={i} bold color="yellow">{line}</Text>
+          ))}
+          <Text bold color="yellow">You are now level {newLevel}!</Text>
+        </Box>
       )}
     </Box>
   );
