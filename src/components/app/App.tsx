@@ -830,18 +830,24 @@ export default function App() {
           enemyRepo.trackEncounter(combatEnemy.name, combatEnemy.tier);
         }
 
-        // Update FSRS schedules for reviewed cards
-        const quality = result.victory
-          ? AnswerQuality.Correct
-          : AnswerQuality.Wrong;
+        // Update FSRS schedules for reviewed cards using per-card quality
+        // Build a lookup from cardResults for each card's actual answer quality
+        const cardQualityMap = new Map<string, AnswerQuality>();
+        for (const cr of result.cardResults) {
+          // Use the last recorded quality for each card (handles re-queued cards)
+          cardQualityMap.set(cr.cardId, cr.quality as AnswerQuality);
+        }
+
         for (const card of combatCards.slice(0, result.cardsReviewed)) {
+          const quality = cardQualityMap.get(card.id) ?? (result.victory ? AnswerQuality.Correct : AnswerQuality.Wrong);
           const existing = statsRepo.getSchedule(card.id);
           const schedule: ScheduleData = existing ?? createInitialSchedule(card.id);
           const updatedSchedule = updateSchedule(schedule, quality, undefined, player?.desiredRetention);
 
           // Compute evolution tier
+          const isCorrect = quality === AnswerQuality.Perfect || quality === AnswerQuality.Correct || quality === AnswerQuality.Partial;
           const evoStats = statsRepo.getCardEvolutionStats(card.id);
-          const newConsecutive = result.victory ? evoStats.consecutiveCorrect + 1 : 0;
+          const newConsecutive = isCorrect ? evoStats.consecutiveCorrect + 1 : 0;
           const tier = evaluateEvolutionTier(
             newConsecutive,
             evoStats.currentTier as EvolutionTier,
@@ -864,7 +870,7 @@ export default function App() {
           );
 
           // Try to award a rare card variant on Perfect answers
-          if ((quality as AnswerQuality) === AnswerQuality.Perfect) {
+          if (quality === AnswerQuality.Perfect) {
             const currentVariant = statsRepo.getCardVariant(card.id);
             const variant = tryAwardVariant(
               newConsecutive,
