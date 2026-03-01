@@ -74,7 +74,7 @@
         "Tests pass"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "selectMode() exists in ModeSelector.ts with weighted selection and recency tracking but is never called. ReviewScreen accepts mode prop but App.tsx never passes one."
     },
     {

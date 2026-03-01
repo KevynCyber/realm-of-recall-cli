@@ -296,6 +296,13 @@ export function ReviewScreen({
         : 0)) /
     cards.length;
 
+  /** Human-friendly mode label */
+  const modeLabel =
+    mode === RetrievalMode.Standard ? "Standard"
+    : mode === RetrievalMode.Reversed ? "Reversed"
+    : mode === RetrievalMode.Teach ? "Teach"
+    : "Connect";
+
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
@@ -303,6 +310,8 @@ export function ReviewScreen({
           Card {currentIndex + 1}/{cards.length}{" "}
         </Text>
         <ProgressBar value={progress} width={30} />
+        <Text dimColor>{"  "}Mode: </Text>
+        <Text color="cyan">{modeLabel}</Text>
       </Box>
 
       {/* Question / Answer display */}

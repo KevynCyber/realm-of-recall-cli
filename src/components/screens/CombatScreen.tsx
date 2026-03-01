@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { Card, CombatResult, Equipment } from "../../types/index.js";
-import { AnswerQuality } from "../../types/index.js";
+import { AnswerQuality, RetrievalMode } from "../../types/index.js";
 import type { Enemy } from "../../types/combat.js";
 import type { Player } from "../../types/player.js";
 import {
@@ -50,6 +50,7 @@ interface Props {
   equippedItems: Equipment[];
   streakBonusPct: number;
   combatSettings?: CombatSettings;
+  retrievalMode?: RetrievalMode;
   onComplete: (result: CombatResult) => void;
 }
 
@@ -60,6 +61,7 @@ export function CombatScreen({
   equippedItems,
   streakBonusPct,
   combatSettings,
+  retrievalMode,
   onComplete,
 }: Props) {
   const theme = useGameTheme();
@@ -230,6 +232,7 @@ export function CombatScreen({
         undefined,
         undefined,
         currentTier,
+        retrievalMode,
       );
 
       // Check if we should absorb damage
