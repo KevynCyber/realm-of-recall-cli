@@ -41,4 +41,5 @@ export interface CombatResult {
   cardsReviewed: number;
   perfectCount: number;
   correctCount: number;
+  playerHpRemaining: number;
 }

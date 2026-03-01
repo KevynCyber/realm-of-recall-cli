@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useInput } from "ink";
 import {
   createDungeonRun,
@@ -16,11 +16,21 @@ import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.j
 import { useGameTheme } from "../app/ThemeProvider.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 
+export interface FloorCombatResult {
+  victory: boolean;
+  goldEarned: number;
+  xpEarned: number;
+  hpRemaining: number;
+}
+
 interface Props {
   playerHp: number;
   playerMaxHp: number;
   playerLevel: number;
+  initialRunState?: DungeonRunState | null;
   onFloorCombat: (floorNumber: number) => void;
+  floorCombatResult?: FloorCombatResult | null;
+  onRunStateChange?: (state: DungeonRunState) => void;
   onComplete: (result: {
     gold: number;
     xp: number;
@@ -30,30 +40,7 @@ interface Props {
   onBack: () => void;
 }
 
-type Phase = "floor_preview" | "event" | "event_result" | "complete";
-
-// Simulated floor outcome used for the "press Enter to complete" stub flow.
-interface SimulatedFloorResult {
-  goldEarned: number;
-  xpEarned: number;
-  hpRemaining: number;
-  victory: boolean;
-}
-
-function simulateFloorResult(
-  run: DungeonRunState,
-  playerLevel: number,
-): SimulatedFloorResult {
-  const config = getCurrentFloorConfig(run);
-  const baseGold = 10 + playerLevel * 2;
-  const baseXp = 15 + playerLevel * 3;
-  return {
-    goldEarned: Math.ceil(baseGold * config.rewardMultiplier),
-    xpEarned: Math.ceil(baseXp * config.rewardMultiplier),
-    hpRemaining: run.playerHp,
-    victory: true,
-  };
-}
+type Phase = "floor_preview" | "awaiting_combat" | "event" | "event_result" | "complete";
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -95,17 +82,28 @@ export function DungeonRunScreen({
   playerHp,
   playerMaxHp,
   playerLevel,
+  initialRunState,
   onFloorCombat,
+  floorCombatResult,
+  onRunStateChange,
   onComplete,
   onBack,
 }: Props) {
   const theme = useGameTheme();
 
-  // Initialise the run state once on mount.
-  const [run, setRun] = useState<DungeonRunState>(() =>
-    createDungeonRun(playerHp, playerMaxHp),
+  // Initialise the run state: use saved state from parent if available, else create fresh.
+  const [run, setRunInternal] = useState<DungeonRunState>(() =>
+    initialRunState ?? createDungeonRun(playerHp, playerMaxHp),
   );
-  const [phase, setPhase] = useState<Phase>("floor_preview");
+
+  // Wrap setRun to also notify parent of state changes
+  const setRun = useCallback((newRun: DungeonRunState) => {
+    setRunInternal(newRun);
+    onRunStateChange?.(newRun);
+  }, [onRunStateChange]);
+  const [phase, setPhase] = useState<Phase>(
+    floorCombatResult ? "awaiting_combat" : "floor_preview",
+  );
   const [activeEvent, setActiveEvent] = useState<RandomEvent | null>(null);
   const [eventOutcome, setEventOutcome] = useState<EventOutcome | null>(null);
 
@@ -150,6 +148,36 @@ export function DungeonRunScreen({
     [],
   );
 
+  // ─── Process combat results from parent ──────────────────────────────────
+
+  // Track whether we've already processed the current result to avoid re-processing.
+  const lastProcessedResult = useRef<FloorCombatResult | null>(null);
+
+  useEffect(() => {
+    if (
+      phase !== "awaiting_combat" ||
+      !floorCombatResult ||
+      floorCombatResult === lastProcessedResult.current
+    ) {
+      return;
+    }
+    lastProcessedResult.current = floorCombatResult;
+
+    if (floorCombatResult.victory) {
+      const updated = completeFloor(
+        run,
+        floorCombatResult.goldEarned,
+        floorCombatResult.xpEarned,
+        floorCombatResult.hpRemaining,
+      );
+      advanceAfterFloor(updated);
+    } else {
+      const updated = recordDefeat(run);
+      setRun(updated);
+      setPhase("complete");
+    }
+  }, [phase, floorCombatResult, run, advanceAfterFloor]);
+
   // ─── Input handling ───────────────────────────────────────────────────────
 
   useInput(
@@ -159,24 +187,9 @@ export function DungeonRunScreen({
       // ── Floor preview ──────────────────────────────────────────────────
       if (phase === "floor_preview") {
         if (key.return) {
-          // Simulate combat: in a full integration the parent would render
-          // CombatScreen and call back with the result. For now we simulate
-          // a floor completion so the dungeon flow is fully exercisable.
+          // Delegate to parent to render real CombatScreen for this floor.
           onFloorCombat(run.currentFloor);
-          const result = simulateFloorResult(run, playerLevel);
-          if (result.victory) {
-            const updated = completeFloor(
-              run,
-              result.goldEarned,
-              result.xpEarned,
-              result.hpRemaining,
-            );
-            advanceAfterFloor(updated);
-          } else {
-            const updated = recordDefeat(run);
-            setRun(updated);
-            setPhase("complete");
-          }
+          setPhase("awaiting_combat");
           return;
         }
 
@@ -242,7 +255,7 @@ export function DungeonRunScreen({
         }
       }
     },
-    { isActive: true },
+    { isActive: phase !== "awaiting_combat" },
   );
 
   // ─── Render helpers ───────────────────────────────────────────────────────
@@ -333,6 +346,15 @@ export function DungeonRunScreen({
             <Text dimColor>[B] Back</Text>
           )}
         </Box>
+      </Box>
+    );
+  }
+
+  // ── Awaiting combat (parent renders CombatScreen) ─────────────────────────
+  if (phase === "awaiting_combat") {
+    return (
+      <Box flexDirection="column" paddingX={2} paddingY={1}>
+        <Text dimColor>Combat in progress...</Text>
       </Box>
     );
   }
