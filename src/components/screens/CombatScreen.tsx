@@ -10,6 +10,7 @@ import {
   resolveTurn,
   isCombatOver,
   getCombatRewards,
+  parseEquipmentEffects,
 } from "../../core/combat/CombatEngine.js";
 import type { CombatState } from "../../core/combat/CombatEngine.js";
 import { rollLoot } from "../../core/combat/LootTable.js";
@@ -74,6 +75,7 @@ export function CombatScreen({
 }: Props) {
   const theme = useGameTheme();
   const stats = getEffectiveStats(player, equippedItems);
+  const parsedEffects = useMemo(() => parseEquipmentEffects(equippedItems), [equippedItems]);
 
   const [phase, setPhase] = useState<Phase>("encounter_preview");
   const [combat, setCombat] = useState<CombatState>(() => {
@@ -280,6 +282,7 @@ export function CombatScreen({
           streakBonusPct,
           stats.xpBonusPct,
           stats.goldBonusPct,
+          parsedEffects,
         );
         setRewards(combatRewards);
         const droppedLoot = rollLoot(enemy.tier);
@@ -289,7 +292,7 @@ export function CombatScreen({
       }
       setPhase("result");
     },
-    [combat, enemy, streakBonusPct, stats.xpBonusPct, stats.goldBonusPct],
+    [combat, enemy, streakBonusPct, stats.xpBonusPct, stats.goldBonusPct, parsedEffects],
   );
 
   // -- Handle answer submission in card phase --
@@ -344,6 +347,7 @@ export function CombatScreen({
         undefined,
         currentTier,
         retrievalMode,
+        parsedEffects,
       );
 
       // Check if we should absorb damage
@@ -397,7 +401,7 @@ export function CombatScreen({
 
       setPhase("resolve");
     },
-    [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings, cardQueue, requeueCounts],
+    [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings, cardQueue, requeueCounts, parsedEffects],
   );
 
   // -- Handle [A] key to open ability menu during card phase --
