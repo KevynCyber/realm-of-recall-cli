@@ -8,6 +8,7 @@ import {
   RetrievalMode,
 } from "../../types/index.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
+import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { generateHint, getMaxHintLevel, isFullReveal } from "../../core/cards/HintGenerator.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
@@ -583,7 +584,7 @@ export function ReviewScreen({
       {/* Feedback display (standard / reversed modes) */}
       {phase === "feedback" && lastQuality !== null && (
         <Box flexDirection="column" marginTop={1}>
-          <FeedbackLine quality={lastQuality} />
+          <QualityFeedback quality={lastQuality} />
           <Text dimColor>
             Correct answer:{" "}
             <Text color="green">{effectiveCard.back}</Text>
@@ -653,19 +654,4 @@ function TeachDisplay({ card, phase }: { card: Card; phase: Phase }) {
   );
 }
 
-function FeedbackLine({ quality }: { quality: AnswerQuality }) {
-  const config: Record<AnswerQuality, { text: string; color: string }> = {
-    [AnswerQuality.Perfect]: { text: "PERFECT!", color: "yellow" },
-    [AnswerQuality.Correct]: { text: "Correct!", color: "green" },
-    [AnswerQuality.Partial]: { text: "Partial match", color: "cyan" },
-    [AnswerQuality.Wrong]: { text: "Wrong", color: "red" },
-    [AnswerQuality.Timeout]: { text: "Time's up!", color: "red" },
-  };
-
-  const { text, color } = config[quality];
-  return (
-    <Text bold color={color}>
-      {text}
-    </Text>
-  );
-}
+// QualityFeedback imported from shared component

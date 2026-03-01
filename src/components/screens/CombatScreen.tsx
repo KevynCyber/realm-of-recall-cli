@@ -13,6 +13,7 @@ import {
   parseEquipmentEffects,
 } from "../../core/combat/CombatEngine.js";
 import type { CombatState } from "../../core/combat/CombatEngine.js";
+import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { rollLoot } from "../../core/combat/LootTable.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { getEffectiveStats } from "../../core/player/PlayerStats.js";
@@ -863,18 +864,4 @@ function LoreReveal({ lore }: { lore: LoreFragment }) {
   );
 }
 
-function QualityFeedback({ quality }: { quality: AnswerQuality }) {
-  const config: Record<AnswerQuality, { text: string; color: string }> = {
-    [AnswerQuality.Perfect]: { text: "PERFECT!", color: "yellow" },
-    [AnswerQuality.Correct]: { text: "Correct!", color: "green" },
-    [AnswerQuality.Partial]: { text: "Partial match", color: "cyan" },
-    [AnswerQuality.Wrong]: { text: "Wrong!", color: "red" },
-    [AnswerQuality.Timeout]: { text: "Time's up!", color: "red" },
-  };
-  const { text, color } = config[quality];
-  return (
-    <Text bold color={color}>
-      {text}
-    </Text>
-  );
-}
+// QualityFeedback imported from shared component
