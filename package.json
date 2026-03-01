@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@inkjs/ui": "^2.0.0",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.6.2",
     "commander": "^13.1.0",
     "fullscreen-ink": "^0.1.0",
     "ink": "^5.1.0",
