@@ -522,7 +522,7 @@
         "Tests pass"
       ],
       "priority": 28,
-      "passes": false,
+      "passes": true,
       "notes": "OSC title update is a single escape sequence. BEL is already partially implemented for level-up. Gating behind REALM_NO_ANIMATION keeps accessibility consistent."
     },
     {
