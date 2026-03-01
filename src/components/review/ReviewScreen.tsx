@@ -10,6 +10,7 @@ import {
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { generateHint, getMaxHintLevel, isFullReveal, generatePartialCue } from "../../core/cards/HintGenerator.js";
+import { getLearningProgress, isOverlearning, shouldRequeueCard, OVERLEARNING_MESSAGE } from "../../core/review/LearningGate.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import { getDatabase } from "../../data/database.js";
@@ -145,6 +146,8 @@ export function ReviewScreen({
   // Elaboration prompt state
   const [elaborationPrompt, setElaborationPrompt] = useState<string>("");
   const [elaborationInput, setElaborationInput] = useState("");
+  // Learning gate: per-card consecutive correct counts within this session
+  const [sessionCorrectCounts, setSessionCorrectCounts] = useState<Map<string, number>>(() => new Map());
 
   const card = cardQueue[currentIndex];
   const totalTime = timerSecondsProp === 0 ? Infinity : timerSecondsProp; // 0 = disabled
@@ -184,15 +187,29 @@ export function ReviewScreen({
    */
   const advanceCard = useCallback(
     (extras?: Partial<ReviewResult>, qualityOverride?: AnswerQuality) => {
-      // Re-queue failed cards for successive relearning
       const quality = qualityOverride ?? lastQuality;
-      if (
-        card &&
-        quality !== null &&
-        (quality === AnswerQuality.Wrong ||
-          quality === AnswerQuality.Timeout)
-      ) {
-        requeueCard(card);
+
+      if (card && quality !== null) {
+        const isCorrect =
+          quality === AnswerQuality.Perfect ||
+          quality === AnswerQuality.Correct;
+
+        if (isCorrect) {
+          // Track consecutive correct for learning gate
+          setSessionCorrectCounts((prev) => {
+            const next = new Map(prev);
+            next.set(card.id, (prev.get(card.id) ?? 0) + 1);
+            return next;
+          });
+        } else {
+          // Reset on wrong answer and re-queue for successive relearning
+          setSessionCorrectCounts((prev) => {
+            const next = new Map(prev);
+            next.set(card.id, 0);
+            return next;
+          });
+          requeueCard(card);
+        }
       }
 
       setResults((prev) => {
@@ -529,6 +546,27 @@ export function ReviewScreen({
           <Text dimColor italic>Press [S] suspend | [B] bury</Text>
         </Box>
       )}
+
+      {/* Learning gate progress */}
+      {phase === "question" && card && (() => {
+        const count = sessionCorrectCounts.get(card.id) ?? 0;
+        const progress = getLearningProgress(count);
+        if (progress.complete && isOverlearning(count)) {
+          return (
+            <Box marginTop={1}>
+              <Text color="yellow" italic>{OVERLEARNING_MESSAGE}</Text>
+            </Box>
+          );
+        }
+        if (!progress.complete && count > 0) {
+          return (
+            <Box marginTop={1}>
+              <Text dimColor>Learning: {progress.current}/{progress.required} correct</Text>
+            </Box>
+          );
+        }
+        return null;
+      })()}
 
       {/* Hint display */}
       {!isTeach && phase === "question" && showHint && effectiveCard && (
