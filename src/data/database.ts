@@ -290,4 +290,12 @@ const migrations = [
     name: "015_due_cards_covering_index",
     sql: `CREATE INDEX IF NOT EXISTS idx_stats_due_cards ON recall_stats(suspended, buried_until, next_review_at, card_state);`,
   },
+  {
+    name: "016_skill_tree_columns",
+    sql: `
+      ALTER TABLE player ADD COLUMN skill_recall INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_battle INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE player ADD COLUMN skill_scholar INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
