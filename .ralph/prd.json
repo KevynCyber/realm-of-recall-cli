@@ -408,7 +408,7 @@
         "Tests pass"
       ],
       "priority": 22,
-      "passes": false,
+      "passes": true,
       "notes": "23 equipment templates already have specialEffect strings but they're never evaluated. 'Rewards must feed back into the loop' — currently equipment drops feel hollow."
     },
     {

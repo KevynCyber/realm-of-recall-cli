@@ -2,10 +2,129 @@
 
 import type { Enemy, CombatEvent, CombatAction } from "../../types/combat.js";
 import { AnswerQuality, ConfidenceLevel, RetrievalMode } from "../../types/index.js";
+import type { Equipment } from "../../types/index.js";
 import { calculateCombatXP, calculateGoldReward } from "../progression/XPCalculator.js";
 import { getTierDamageMultiplier, getTierCritBonus } from "../cards/CardEvolution.js";
 import type { EvolutionTier } from "../cards/CardEvolution.js";
 import { getModeDamageMultiplier } from "../review/ModeSelector.js";
+
+// ── Special Effect Types ──────────────────────────────────────
+
+export type SpecialEffectType =
+  | "bonus_damage_on_perfect"
+  | "heal_on_correct"
+  | "double_crit_damage"
+  | "gold_bonus_pct"
+  | "unknown";
+
+export interface ParsedSpecialEffect {
+  type: SpecialEffectType;
+  value: number;
+  itemName: string;
+  raw: string;
+}
+
+export interface SpecialEffectResult {
+  bonusDamage: number;
+  healAmount: number;
+  doubleCrit: boolean;
+  goldBonusPct: number;
+  activations: string[];
+}
+
+/**
+ * Parse a specialEffect string from equipment into a structured effect.
+ */
+export function parseSpecialEffect(effectStr: string, itemName: string): ParsedSpecialEffect {
+  // 'Perfect answers deal +N bonus damage'
+  const bonusDmgMatch = effectStr.match(/^Perfect answers deal \+(\d+) bonus damage$/i);
+  if (bonusDmgMatch) {
+    return { type: "bonus_damage_on_perfect", value: parseInt(bonusDmgMatch[1], 10), itemName, raw: effectStr };
+  }
+
+  // 'Correct answers heal N HP'
+  const healMatch = effectStr.match(/^Correct answers heal (\d+) HP$/i);
+  if (healMatch) {
+    return { type: "heal_on_correct", value: parseInt(healMatch[1], 10), itemName, raw: effectStr };
+  }
+
+  // 'Critical hits deal double damage'
+  const critMatch = effectStr.match(/^Critical hits deal double damage$/i);
+  if (critMatch) {
+    return { type: "double_crit_damage", value: 2, itemName, raw: effectStr };
+  }
+
+  // '+N% gold from combat'
+  const goldMatch = effectStr.match(/^\+(\d+)% gold from combat$/i);
+  if (goldMatch) {
+    return { type: "gold_bonus_pct", value: parseInt(goldMatch[1], 10), itemName, raw: effectStr };
+  }
+
+  return { type: "unknown", value: 0, itemName, raw: effectStr };
+}
+
+/**
+ * Parse all equipped items' special effects.
+ */
+export function parseEquipmentEffects(equippedItems: Equipment[]): ParsedSpecialEffect[] {
+  const effects: ParsedSpecialEffect[] = [];
+  for (const item of equippedItems) {
+    if (item.specialEffect) {
+      const parsed = parseSpecialEffect(item.specialEffect, item.name);
+      if (parsed.type !== "unknown") {
+        effects.push(parsed);
+      }
+    }
+  }
+  return effects;
+}
+
+/**
+ * Apply special effects based on answer quality and combat action.
+ * Returns adjustments to apply to combat state.
+ */
+export function applySpecialEffects(
+  quality: AnswerQuality,
+  action: CombatAction,
+  effects: ParsedSpecialEffect[],
+): SpecialEffectResult {
+  const result: SpecialEffectResult = {
+    bonusDamage: 0,
+    healAmount: 0,
+    doubleCrit: false,
+    goldBonusPct: 0,
+    activations: [],
+  };
+
+  for (const effect of effects) {
+    switch (effect.type) {
+      case "bonus_damage_on_perfect":
+        if (quality === AnswerQuality.Perfect) {
+          result.bonusDamage += effect.value;
+          result.activations.push(`${effect.itemName} activates: +${effect.value} bonus damage!`);
+        }
+        break;
+      case "heal_on_correct":
+        if (quality === AnswerQuality.Perfect || quality === AnswerQuality.Correct) {
+          result.healAmount += effect.value;
+          result.activations.push(`${effect.itemName} activates: heal ${effect.value} HP!`);
+        }
+        break;
+      case "double_crit_damage":
+        if (action === "player_critical") {
+          result.doubleCrit = true;
+          result.activations.push(`${effect.itemName} activates: critical damage doubled!`);
+        }
+        break;
+      case "gold_bonus_pct":
+        result.goldBonusPct += effect.value;
+        // Gold bonus is passive, no per-turn activation message
+        break;
+    }
+  }
+
+  return result;
+}
 
 export interface CombatState {
   enemy: Enemy;
@@ -56,6 +175,7 @@ export function resolveTurn(
   confidence?: ConfidenceLevel,
   evolutionTier?: number,
   retrievalMode?: RetrievalMode,
+  equipmentEffects?: ParsedSpecialEffect[],
 ): { newState: CombatState; event: CombatEvent } {
   // Deep copy state
   const newState: CombatState = {
@@ -138,6 +258,40 @@ export function resolveTurn(
     }
   }
 
+  // Apply equipment special effects
+  const effects = equipmentEffects && equipmentEffects.length > 0
+    ? applySpecialEffects(answerQuality, action, equipmentEffects)
+    : null;
+
+  if (effects) {
+    // Double crit damage (applied before bonus damage)
+    if (effects.doubleCrit && action === "player_critical") {
+      newState.enemy.hp += damage; // undo original damage
+      damage = damage * 2;
+      newState.enemy.hp -= damage; // apply doubled damage
+    }
+
+    // Bonus damage on perfect
+    if (effects.bonusDamage > 0) {
+      damage += effects.bonusDamage;
+      newState.enemy.hp -= effects.bonusDamage;
+    }
+
+    // Heal on correct/perfect
+    if (effects.healAmount > 0) {
+      newState.playerHp = Math.min(newState.playerMaxHp, newState.playerHp + effects.healAmount);
+    }
+
+    // Add activation events to combat log
+    for (const activation of effects.activations) {
+      newState.events.push({
+        action,
+        damage: 0,
+        description: activation,
+      });
+    }
+  }
+
   // Clamp HP to 0 minimum
   newState.enemy.hp = Math.max(0, newState.enemy.hp);
   newState.playerHp = Math.max(0, newState.playerHp);
@@ -187,8 +341,18 @@ export function getCombatRewards(
   streakBonusPct: number,
   classXpBonusPct: number,
   classGoldBonusPct: number,
+  equipmentEffects?: ParsedSpecialEffect[],
 ): { xp: number; gold: number } {
   const xp = calculateCombatXP(enemy.xpReward, state.stats, streakBonusPct, 0, classXpBonusPct);
-  const gold = calculateGoldReward(enemy.goldReward, classGoldBonusPct);
+  // Calculate equipment gold bonus from special effects
+  let equipGoldBonusPct = 0;
+  if (equipmentEffects) {
+    for (const effect of equipmentEffects) {
+      if (effect.type === "gold_bonus_pct") {
+        equipGoldBonusPct += effect.value;
+      }
+    }
+  }
+  const gold = calculateGoldReward(enemy.goldReward, classGoldBonusPct + equipGoldBonusPct);
   return { xp, gold };
 }
