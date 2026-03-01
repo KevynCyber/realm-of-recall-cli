@@ -193,6 +193,15 @@ export class StatsRepository {
     return row ? row.gap_streak : 0;
   }
 
+  getCardHealthData(cardId: string): { recentQualities: string[]; totalLapses: number } {
+    const recentQualities = this.getRecentQualities(cardId, 5);
+    const schedule = this.getSchedule(cardId);
+    return {
+      recentQualities,
+      totalLapses: schedule?.lapses ?? 0,
+    };
+  }
+
   getRecentQualities(cardId: string, limit = 5): string[] {
     const rows = this.db
       .prepare(
