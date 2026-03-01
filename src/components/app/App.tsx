@@ -13,6 +13,12 @@ import { DeckScreen } from "../screens/DeckScreen.js";
 import { AchievementScreen } from "../screens/AchievementScreen.js";
 import { DailyChallengeScreen } from "../screens/DailyChallengeScreen.js";
 import { DungeonRunScreen } from "../screens/DungeonRunScreen.js";
+import type { FloorCombatResult } from "../screens/DungeonRunScreen.js";
+import {
+  getCurrentFloorConfig,
+  scaleEnemyForFloor,
+  createDungeonRun,
+} from "../../core/combat/DungeonRun.js";
 import { RandomEventScreen } from "../screens/RandomEventScreen.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
 import type { ReviewResult } from "../review/ReviewScreen.js";
@@ -174,6 +180,12 @@ export default function App() {
   // Post-combat random event state
   const [randomEvent, setRandomEvent] = useState<RandomEvent | null>(null);
   const [eventOutcome, setEventOutcome] = useState<EventOutcome | null>(null);
+
+  // Dungeon combat state
+  const [isDungeonFloor, setIsDungeonFloor] = useState(false);
+  const [dungeonFloorCombatResult, setDungeonFloorCombatResult] = useState<FloorCombatResult | null>(null);
+  const [dungeonRunState, setDungeonRunState] = useState<import("../../core/combat/DungeonRun.js").DungeonRunState | null>(null);
+  const [dungeonCombatStartHp, setDungeonCombatStartHp] = useState<number | undefined>(undefined);
 
   // Reflection flow state
   const [reflectionAccuracy, setReflectionAccuracy] = useState(0);
@@ -547,6 +559,9 @@ export default function App() {
         }
         case "dungeon": {
           if (!player) break;
+          // Initialize a fresh dungeon run state when entering from hub
+          setDungeonRunState(createDungeonRun(player.hp, player.maxHp));
+          setDungeonFloorCombatResult(null);
           setScreen("dungeon");
           break;
         }
@@ -635,6 +650,20 @@ export default function App() {
         checkAchievements(updated);
         refreshCardsDue();
 
+        // If this was a dungeon floor combat, route results back to dungeon
+        if (isDungeonFloor) {
+          setIsDungeonFloor(false);
+          setDungeonCombatStartHp(undefined);
+          setDungeonFloorCombatResult({
+            victory: result.victory,
+            goldEarned: result.goldEarned,
+            xpEarned: result.xpEarned,
+            hpRemaining: result.playerHpRemaining,
+          });
+          setScreen("dungeon");
+          return;
+        }
+
         // 30% chance of random event after victory
         if (result.victory) {
           const hpPct = (updated.hp / updated.maxHp) * 100;
@@ -650,10 +679,21 @@ export default function App() {
         setScreen("hub");
       } catch (err: any) {
         console.error("Error saving combat results:", err.message);
-        setScreen("hub");
+        if (isDungeonFloor) {
+          setIsDungeonFloor(false);
+          setDungeonFloorCombatResult({
+            victory: false,
+            goldEarned: 0,
+            xpEarned: 0,
+            hpRemaining: player?.hp ?? 0,
+          });
+          setScreen("dungeon");
+        } else {
+          setScreen("hub");
+        }
       }
     },
-    [player, combatCards, refreshCardsDue, checkAchievements],
+    [player, combatCards, refreshCardsDue, checkAchievements, isDungeonFloor],
   );
 
   const handleReviewComplete = useCallback(
@@ -940,6 +980,7 @@ export default function App() {
             streakBonusPct={streakBonusPct}
             combatSettings={combatSettings}
             retrievalMode={currentRetrievalMode}
+            startingHpOverride={isDungeonFloor ? dungeonCombatStartHp : undefined}
             onComplete={handleCombatComplete}
           />
         ) : (
@@ -1080,8 +1121,28 @@ export default function App() {
             playerHp={player.hp}
             playerMaxHp={player.maxHp}
             playerLevel={player.level}
-            onFloorCombat={() => {
-              // Floor combat callback - currently handled by the DungeonRunScreen itself
+            initialRunState={dungeonRunState}
+            floorCombatResult={dungeonFloorCombatResult}
+            onRunStateChange={(state) => setDungeonRunState(state)}
+            onFloorCombat={(floorNumber: number) => {
+              if (!player) return;
+              // Build a temporary run state to get the floor config
+              const tempRun = { ...(dungeonRunState ?? createDungeonRun(player.hp, player.maxHp)), currentFloor: floorNumber };
+              const floorConfig = getCurrentFloorConfig(tempRun);
+
+              // Use dungeon run HP for combat starting HP
+              const dungeonHp = dungeonRunState?.playerHp ?? player.hp;
+
+              // Prepare combat cards and enemy scaled for this floor
+              if (prepareCombat()) {
+                // Scale the enemy by the floor's HP multiplier using functional update
+                // since prepareCombat just called setCombatEnemy
+                setCombatEnemy((prev) => prev ? scaleEnemyForFloor(prev, floorConfig) : prev);
+                setIsDungeonFloor(true);
+                setDungeonCombatStartHp(dungeonHp);
+                setDungeonFloorCombatResult(null);
+                setScreen("combat");
+              }
             }}
             onComplete={(result) => {
               if (!player) return;

@@ -51,6 +51,7 @@ interface Props {
   streakBonusPct: number;
   combatSettings?: CombatSettings;
   retrievalMode?: RetrievalMode;
+  startingHpOverride?: number;
   onComplete: (result: CombatResult) => void;
 }
 
@@ -62,6 +63,7 @@ export function CombatScreen({
   streakBonusPct,
   combatSettings,
   retrievalMode,
+  startingHpOverride,
   onComplete,
 }: Props) {
   const theme = useGameTheme();
@@ -69,11 +71,13 @@ export function CombatScreen({
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [combat, setCombat] = useState<CombatState>(() => {
+    // Use override HP (e.g., from dungeon floor) if provided, else use player HP
+    const baseHp = startingHpOverride ?? player.hp;
     // Apply startingHpPercent from ascension settings
     const startHpPct = combatSettings?.startingHpPercent ?? 100;
     const startingHp = startHpPct < 100
-      ? Math.max(1, Math.floor(player.hp * (startHpPct / 100)))
-      : player.hp;
+      ? Math.max(1, Math.floor(baseHp * (startHpPct / 100)))
+      : baseHp;
     const state = createCombatState(enemy, stats.maxHp, startingHp, cards.length);
     // Apply ascension poison damage per turn
     if (combatSettings?.enemyPoisonDamage && combatSettings.enemyPoisonDamage > 0) {
@@ -345,6 +349,7 @@ export function CombatScreen({
           cardsReviewed: combat.currentCardIndex,
           perfectCount: combat.stats.perfectCount,
           correctCount: combat.stats.correctCount,
+          playerHpRemaining: combat.playerHp,
         };
         setCombatResult(result);
         setPhase("reflection");
