@@ -37,6 +37,7 @@ const testPlayer: Player = {
   dailyChallengeScore: 0,
   dailyChallengeDate: null,
   desiredRetention: 0.9,
+  maxNewCardsPerDay: 20,
   createdAt: new Date().toISOString(),
 };
 

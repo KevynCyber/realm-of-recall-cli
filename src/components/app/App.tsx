@@ -128,6 +128,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("title");
   const [player, setPlayer] = useState<Player | null>(null);
   const [cardsDue, setCardsDue] = useState(0);
+  const [newCardsRemaining, setNewCardsRemaining] = useState(0);
 
   // Screen-specific data
   const [combatCards, setCombatCards] = useState<Card[]>([]);
@@ -212,9 +213,13 @@ export default function App() {
       const db = getDatabase();
       const cardRepo = new CardRepository(db);
       const statsRepo = new StatsRepository(db);
+      const playerRepo = new PlayerRepository(db);
+      const p = playerRepo.getPlayer();
+      const maxNew = p?.maxNewCardsPerDay ?? 20;
       const equippedIds = cardRepo.getEquippedDeckIds();
-      const dueIds = statsRepo.getDueCards(equippedIds, 9999);
-      setCardsDue(dueIds.length);
+      const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
+      setCardsDue(cardIds.length);
+      setNewCardsRemaining(remaining);
     } catch {
       // ignore
     }
@@ -243,8 +248,10 @@ export default function App() {
         const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
         const equippedIds = cardRepo.getEquippedDeckIds();
-        const dueIds = statsRepo.getDueCards(equippedIds, 9999);
-        setCardsDue(dueIds.length);
+        const maxNew = p.maxNewCardsPerDay ?? 20;
+        const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
+        setCardsDue(cardIds.length);
+        setNewCardsRemaining(remaining);
       }
     } catch {
       // ignore — show title screen
@@ -319,20 +326,21 @@ export default function App() {
         const statsRepo = new StatsRepository(db);
         const equipRepo = new EquipmentRepository(db);
 
+        const maxNew = player.maxNewCardsPerDay ?? 20;
         let cards: Card[];
         if (deckId) {
-          // Zone-specific combat: pull from single deck
-          const dueIds = statsRepo.getDueCards(deckId, 10);
-          cards = dueIds
+          // Zone-specific combat: pull from single deck with new card limit
+          const { cardIds } = statsRepo.getDueCardsWithNewLimit(deckId, maxNew, 10);
+          cards = cardIds
             .map((id) => cardRepo.getCard(id))
             .filter((c): c is Card => c !== undefined);
         } else {
-          // Hub combat: interleave across equipped decks
+          // Hub combat: interleave across equipped decks with new card limit
           const equippedDeckIds = cardRepo.getEquippedDeckIds();
           const cardsByDeck = new Map<string, Card[]>();
           for (const did of equippedDeckIds) {
-            const dueIds = statsRepo.getDueCards(did, 20);
-            const deckCards = dueIds
+            const { cardIds } = statsRepo.getDueCardsWithNewLimit(did, maxNew, 20);
+            const deckCards = cardIds
               .map((id) => cardRepo.getCard(id))
               .filter((c): c is Card => c !== undefined);
             if (deckCards.length > 0) {
@@ -385,7 +393,8 @@ export default function App() {
             const cardRepo = new CardRepository(db);
             const statsRepo = new StatsRepository(db);
             const equippedIds = cardRepo.getEquippedDeckIds();
-            const dueIds = statsRepo.getDueCards(equippedIds, 20);
+            const maxNew = player?.maxNewCardsPerDay ?? 20;
+            const { cardIds: dueIds } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 20);
             const cards = dueIds
               .map((id) => cardRepo.getCard(id))
               .filter((c): c is Card => c !== undefined);
@@ -968,6 +977,7 @@ export default function App() {
           <HubScreen
             cardsDue={cardsDue}
             streakAtRisk={streakAtRisk}
+            newCardsRemaining={newCardsRemaining}
             onNavigate={navigateToScreen}
           />
         );
@@ -1083,6 +1093,18 @@ export default function App() {
                 const updated = { ...player, desiredRetention: retention };
                 playerRepo.updatePlayer(updated);
                 setPlayer(updated);
+              } catch {
+                // ignore
+              }
+            }}
+            onUpdateMaxNewCards={(maxNewCards: number) => {
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = { ...player, maxNewCardsPerDay: maxNewCards };
+                playerRepo.updatePlayer(updated);
+                setPlayer(updated);
+                refreshCardsDue();
               } catch {
                 // ignore
               }
