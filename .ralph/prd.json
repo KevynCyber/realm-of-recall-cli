@@ -1,0 +1,581 @@
+{
+  "project": "Realm of Recall",
+  "branchName": "ralph/learning-perfection-v0.6",
+  "description": "Learning Perfection Update — Fix disconnected systems, add learning science features, plus 10 research-backed improvements: delayed retention rewards, streak decay, idle progression, encounter previews, equipment effects, rare card variants, bestiary, narrative death, terminal polish, and meta-progression unlocks",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Wire card evolution tier computation into review and combat flows",
+      "description": "As a learner, I want my cards to visibly evolve through tiers (New → Learned → Proven → Mastered) with damage bonuses so my long-term mastery is rewarded.",
+      "acceptanceCriteria": [
+        "In App.tsx handleReviewComplete(), after recording each attempt, call evaluateEvolutionTier() from src/core/cards/CardEvolution.ts and pass the result to statsRepo.recordAttempt() as evolutionTier",
+        "In App.tsx handleCombatComplete(), similarly compute and persist evolutionTier for each reviewed card",
+        "In CombatScreen.tsx, look up each card's evolution tier from StatsRepository and pass it to FlashcardFace as the evolutionTier prop",
+        "In CombatScreen.tsx resolveTurn() call, pass the card's evolutionTier so damage multipliers (1.0/1.25/1.5/2.0) apply",
+        "In ReviewScreen.tsx, look up and pass evolutionTier to FlashcardFace",
+        "Verify that FlashcardFace displays stars, border styles, and tier name based on actual data",
+        "Add tests verifying evolutionTier is passed through and affects damage in combat",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "evaluateEvolutionTier() and getCardHealth() exist in src/core/cards/CardEvolution.ts but are never called. FlashcardFace already renders the props. CombatEngine.resolveTurn() already accepts optional evolutionTier param."
+    },
+    {
+      "id": "US-002",
+      "title": "Wire card health status computation into review and combat",
+      "description": "As a learner, I want to see which cards are struggling or leeches so I know where to focus my study effort.",
+      "acceptanceCriteria": [
+        "In CombatScreen.tsx, compute card health via getCardHealth() from CardEvolution.ts using the card's recent attempt history from StatsRepository",
+        "Pass cardHealth prop ('healthy'|'struggling'|'leech') to FlashcardFace in both combat and review",
+        "In ReviewScreen.tsx, similarly compute and pass cardHealth to FlashcardFace",
+        "Verify FlashcardFace shows yellow warning for struggling cards and red warning for leech cards with narrative guidance text",
+        "Add tests verifying health computation triggers on appropriate conditions (3+ failures in last 5 = struggling, 5+ lapses = leech)",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": "getCardHealth() exists but is never called. FlashcardFace already has full UI for struggling/leech cards. Need to bridge the gap by computing health from attempt history."
+    },
+    {
+      "id": "US-003",
+      "title": "Apply ascension combat settings (timer, hints, partial credit, poison, HP)",
+      "description": "As an ascended player, I want ascension modifiers to actually affect gameplay beyond just enemy HP — timer reduction, hint disabling, partial credit removal, and more.",
+      "acceptanceCriteria": [
+        "In App.tsx prepareCombat(), call applyAscensionToCombat(getDefaultCombatSettings(), player.ascensionLevel) and store the CombatSettings in state",
+        "Pass CombatSettings to CombatScreen as a new prop",
+        "CombatScreen uses settings.timerSeconds instead of hardcoded 30",
+        "CombatScreen disables hints when settings.hintsEnabled is false (don't show [H] prompt)",
+        "CombatScreen treats Partial as Wrong when settings.partialCreditEnabled is false",
+        "CombatScreen starts playerHp at settings.startingHpPercent of maxHp",
+        "CombatScreen applies settings.enemyPoisonDamage per turn (deducted from playerHp after each card)",
+        "Add tests verifying each ascension modifier affects combat behavior",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": "applyAscensionToCombat() is defined in AscensionSystem.ts but never called. Currently only applyAscensionToEnemy() is wired up."
+    },
+    {
+      "id": "US-004",
+      "title": "Wire retrieval mode selection into review and combat",
+      "description": "As a learner, I want my review sessions to vary between Standard, Reversed, Teach, and Connect modes for deeper learning.",
+      "acceptanceCriteria": [
+        "In App.tsx when navigating to 'review', call selectMode() from src/core/review/ModeSelector.ts to choose a retrieval mode",
+        "Pass the selected mode to ReviewScreen as the mode prop (currently hardcoded to Standard)",
+        "In App.tsx when navigating to 'combat', also select a mode and pass it to the combat card review flow",
+        "Show the current retrieval mode name in ReviewScreen header (e.g., 'Mode: Reversed')",
+        "Ensure Connect mode's 1.2x damage multiplier is passed through to CombatEngine.resolveTurn()",
+        "Add tests verifying mode selection is called and different modes are passed through",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": "selectMode() exists in ModeSelector.ts with weighted selection and recency tracking but is never called. ReviewScreen accepts mode prop but App.tsx never passes one."
+    },
+    {
+      "id": "US-005",
+      "title": "Replace dungeon run simulated combat with real card review",
+      "description": "As a player, I want dungeon floors to test my actual card knowledge instead of auto-completing.",
+      "acceptanceCriteria": [
+        "Modify DungeonRunScreen to transition to a real CombatScreen or ReviewScreen for each floor instead of calling simulateFloorResult()",
+        "Remove the simulateFloorResult() stub function",
+        "When a floor begins, DungeonRunScreen calls onFloorCombat(floorNumber) which causes App.tsx to prepare real combat cards and render CombatScreen",
+        "App.tsx tracks dungeon state (isDungeonFloor flag) and routes combat completion back to DungeonRunScreen with actual results (victory/defeat, gold, xp, hp remaining)",
+        "Floor enemy HP is scaled by the floor's enemyHpMultiplier from getCurrentFloorConfig()",
+        "Player HP persists across floors (passed from dungeon state, not reset)",
+        "Add tests verifying the dungeon-combat integration flow",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "DungeonRunScreen currently uses simulateFloorResult() which always returns victory:true. The onFloorCombat callback exists but App.tsx has an empty handler."
+    },
+    {
+      "id": "US-006",
+      "title": "Add configurable FSRS desired retention setting",
+      "description": "As a learner, I want to set my target retention rate (e.g., 0.85 or 0.95) so the scheduler adapts to my learning goals.",
+      "acceptanceCriteria": [
+        "Add desiredRetention field to Player type (default 0.9, range 0.70-0.97)",
+        "Add migration to add desired_retention REAL DEFAULT 0.9 column to player table",
+        "Modify Scheduler.ts to accept desiredRetention parameter and pass it to ts-fsrs generatorParameters()",
+        "In App.tsx, pass player.desiredRetention when calling updateSchedule()",
+        "Add a Settings option to the hub menu (or add to Stats screen) where player can adjust desired retention with number keys",
+        "Add tests verifying different retention values produce different scheduling intervals",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "Currently Scheduler.ts uses generatorParameters({ enable_fuzz: true }) with all defaults. Desired retention is the single most impactful FSRS parameter."
+    },
+    {
+      "id": "US-007",
+      "title": "Add max new cards per day limit",
+      "description": "As a learner, I want a configurable daily limit on new cards so I'm not overwhelmed after importing a large deck.",
+      "acceptanceCriteria": [
+        "Add maxNewCardsPerDay field to Player type (default 20)",
+        "Add migration to add max_new_cards_per_day INTEGER DEFAULT 20 to player table",
+        "Modify StatsRepository.getDueCards() (or add a new method) to separate new cards from review cards",
+        "When loading cards for review/combat, limit new (never-seen) cards to maxNewCardsPerDay minus cards already seen today",
+        "Show remaining new card allowance in the hub (e.g., '12 new cards remaining today')",
+        "Allow adjusting maxNewCardsPerDay from Stats or a new Settings screen",
+        "Add tests verifying the new card limit is enforced",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Currently importing a 500-card deck results in all 500 due immediately. Anki defaults to 20 new/day."
+    },
+    {
+      "id": "US-008",
+      "title": "Add successive relearning (re-queue failed cards in same session)",
+      "description": "As a learner, I want cards I get wrong to reappear later in the same session so I practice them again while they're fresh.",
+      "acceptanceCriteria": [
+        "In ReviewScreen.tsx, when a card is answered Wrong or Timeout, add it back to the end of the card queue (max 2 re-queues per card to avoid infinite loops)",
+        "Track re-queue count per card in session state",
+        "Re-queued cards show a 'Retry' indicator on FlashcardFace",
+        "Update progress bar to account for re-queued cards",
+        "In CombatScreen.tsx, similarly re-queue failed cards if there are remaining cards in the deck",
+        "Add tests verifying wrong cards are re-queued and the re-queue limit is respected",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Currently wrong answers are just recorded and moved past. Research shows testing again in the same session (successive relearning) dramatically improves retention."
+    },
+    {
+      "id": "US-009",
+      "title": "Add card suspension and bury controls",
+      "description": "As a learner, I want to suspend leech cards or bury cards I can't review right now so I have manual control over my review queue.",
+      "acceptanceCriteria": [
+        "Add suspended BOOLEAN DEFAULT 0 and buried_until TEXT columns to recall_stats table via migration",
+        "Add suspendCard(cardId) and unsuspendCard(cardId) methods to StatsRepository",
+        "Add buryCard(cardId) method that sets buried_until to tomorrow's date",
+        "Modify getDueCards() to exclude suspended and buried cards",
+        "In ReviewScreen and CombatScreen, add [S] key to suspend current card and [B] key to bury until tomorrow",
+        "Show confirmation text when a card is suspended or buried",
+        "Add a 'Suspended Cards' section to DeckScreen showing suspended card count with option to unsuspend all",
+        "Add tests verifying suspension and bury exclude cards from due queue",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "No mechanism to suspend, bury, or manually skip cards. Essential for leech management."
+    },
+    {
+      "id": "US-010",
+      "title": "Add undo last answer during review",
+      "description": "As a learner, I want to undo my last answer if I made a typo or mis-pressed so my scheduling data isn't corrupted.",
+      "acceptanceCriteria": [
+        "In ReviewScreen.tsx, during the feedback phase, add [U] key to undo the last answer",
+        "Undo removes the last result from the results array, decrements currentIndex, and returns to the question phase for that card",
+        "Only allow undo of the immediately preceding card (not arbitrary history)",
+        "Show 'Answer undone' confirmation message",
+        "In CombatScreen.tsx, during the resolve phase, add [U] key to undo (reverts combat state to pre-answer state)",
+        "Add tests verifying undo correctly reverts state",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "No undo mechanism exists. Mis-presses or accidental submits corrupt scheduling data permanently."
+    },
+    {
+      "id": "US-011",
+      "title": "Add session length guardrails with break suggestions",
+      "description": "As a learner, I want the game to suggest breaks after 15-20 minutes so I don't study past the point of diminishing returns.",
+      "acceptanceCriteria": [
+        "Track session start time in App.tsx state",
+        "After 15 minutes of active review/combat, show a subtle 'Consider taking a break' message in the StatusBar",
+        "After 25 minutes, show a more prominent break suggestion between screens (not interrupting active combat/review)",
+        "Add a BreakSuggestion component that shows session duration, cards reviewed, and a friendly message",
+        "Player can dismiss and continue or return to hub",
+        "Break suggestion respects REALM_NO_ANIMATION env var (can be suppressed)",
+        "Add tests verifying break suggestions appear at correct thresholds",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Research shows attention degrades after ~25 minutes. Microlearning sessions of 5-15 minutes produce 4x higher engagement than long sessions."
+    },
+    {
+      "id": "US-012",
+      "title": "Add backlog management with Welcome Back flow",
+      "description": "As a learner returning after days away, I want a gentle re-engagement flow instead of facing hundreds of overdue cards.",
+      "acceptanceCriteria": [
+        "When player logs in with more than 50 overdue cards, show a WelcomeBackScreen instead of going directly to hub",
+        "WelcomeBackScreen shows days since last review, overdue card count, and a friendly message",
+        "Offers 3 options: 'Quick Catch-Up' (10 easiest overdue cards), 'Normal Session' (20 cards), 'Full Review' (all overdue)",
+        "Quick Catch-Up prioritizes cards with highest FSRS stability (most likely to still be remembered)",
+        "After completing the catch-up session, transition to normal hub",
+        "Create src/components/screens/WelcomeBackScreen.tsx",
+        "Add tests verifying overdue detection and card prioritization",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "Returning to a wall of 200 overdue cards causes most SRS users to quit. Duolingo's gentle re-engagement significantly reduces churn."
+    },
+    {
+      "id": "US-013",
+      "title": "Add in-app card creation flow",
+      "description": "As a learner, I want to create flashcards directly in the app so I can learn from self-authored content (generation effect).",
+      "acceptanceCriteria": [
+        "Add 'Create Cards' option to the hub menu",
+        "Create src/components/screens/CardCreatorScreen.tsx with TextInput fields for front, back, and optional acceptable answers",
+        "Player selects which deck to add the card to (or creates a new deck)",
+        "Card is saved immediately to the database via CardRepository",
+        "Support basic card type (front/back) and cloze deletion (detect {{c1::answer}} syntax)",
+        "Show card count added in session and 'Add Another' / 'Done' options",
+        "Add tests verifying cards are created and persisted correctly",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "Self-authored cards are retained substantially better (generation effect, Slamecka & Graf 1978). Currently the app is import-only."
+    },
+    {
+      "id": "US-014",
+      "title": "Add configurable answer timer with accessibility option to disable",
+      "description": "As a learner with different processing speeds, I want to adjust or disable the answer timer.",
+      "acceptanceCriteria": [
+        "Add timerSeconds field to Player type (default 30, 0 = disabled)",
+        "Add migration for timer_seconds INTEGER DEFAULT 30 column on player table",
+        "Modify CombatScreen and ReviewScreen to use player.timerSeconds instead of hardcoded 30",
+        "When timerSeconds is 0, disable the timer entirely (no Timeout quality)",
+        "Add timer setting to Stats screen or a new Settings screen (options: 15s, 20s, 30s, 45s, 60s, Off)",
+        "Timer interacts correctly with ascension modifiers (ascension reduces the configured timer, not hardcoded 30)",
+        "Add tests verifying configurable timer values",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "Fixed 30s timer is exclusionary for users with dyslexia, ADHD, or processing speed differences."
+    },
+    {
+      "id": "US-015",
+      "title": "Add data export command",
+      "description": "As a learner, I want to export my decks and progress so I can back up my data.",
+      "acceptanceCriteria": [
+        "Add 'ror export [directory]' CLI command in bin/ror.ts",
+        "Export creates a JSON file with all decks, cards, and review statistics",
+        "Export includes player profile (name, class, level, stats) but not equipment/inventory",
+        "Export filename includes date: realm-of-recall-export-YYYY-MM-DD.json",
+        "Format is compatible with 'ror import' for the card/deck portion",
+        "Print export file path and card count on completion",
+        "Add tests verifying export produces valid importable JSON",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "No export functionality. User data lives in a single SQLite file with no backup mechanism."
+    },
+    {
+      "id": "US-016",
+      "title": "Give wisdom XP gameplay impact via learning perks",
+      "description": "As a learner, I want my accumulated wisdom XP to unlock tangible learning perks so reflection feels rewarding.",
+      "acceptanceCriteria": [
+        "Define 5 wisdom perks in a new src/core/progression/WisdomPerks.ts: Extra Hint Level (100 WXP, adds 1 more hint level), Study Shield (250 WXP, 1 free streak shield per week), Quick Learner (500 WXP, new cards start at 1.1x stability), Deep Focus (750 WXP, +10% XP from reviews), Sage's Insight (1000 WXP, Connect mode available)",
+        "getUnlockedPerks(wisdomXp) returns list of unlocked perks",
+        "Apply Quick Learner perk in Scheduler.ts when creating initial schedules",
+        "Apply Deep Focus perk in review XP calculation in App.tsx",
+        "Show unlocked perks in Stats screen under Wisdom XP display",
+        "Add tests verifying perk unlocks at correct thresholds and effects apply",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "Wisdom XP is tracked and awarded but has zero gameplay impact beyond 1 achievement at 500."
+    },
+    {
+      "id": "US-017",
+      "title": "Add elaborative interrogation prompts after correct answers",
+      "description": "As a learner, I want occasional 'Why is this true?' prompts after correct answers to deepen my understanding.",
+      "acceptanceCriteria": [
+        "In ReviewScreen.tsx, after a Correct or Perfect answer on a card at evolution tier >= 1, show a 'Why?' prompt 30% of the time",
+        "The prompt asks 'Why is [answer] correct?' or 'How does this connect to what you know?'",
+        "Player types a brief explanation (or presses Enter to skip)",
+        "If explanation provided, award bonus Wisdom XP (15 per explanation)",
+        "Store explanation as responseText on the attempt record",
+        "Do not show elaboration prompts for new cards (tier 0) — they don't have enough context yet",
+        "Add tests verifying elaboration prompt frequency and XP award",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Dunlosky et al. (2013) rated elaborative interrogation as 'moderate' utility. Works best for review-stage cards where learner has prior knowledge."
+    },
+    {
+      "id": "US-018",
+      "title": "Add delayed retention rewards (3-5x XP for long-interval recalls)",
+      "description": "As a learner, I want bigger XP and gold bonuses when I successfully recall a card after many days, so the reward system reinforces the spacing effect.",
+      "acceptanceCriteria": [
+        "In src/core/progression/XPCalculator.ts, add getRetentionMultiplier(daysSinceLastReview) function: 7-29 days → 3x, 30+ days → 5x, <7 days → 1x",
+        "In App.tsx handleReviewComplete() and handleCombatComplete(), compute days since each card's last review from FSRS last_review field",
+        "Pass retention multiplier to XP and gold calculation so bonus stacks with existing quality/streak multipliers",
+        "In ReviewSummary, show 'Long-term Recall Bonus! (3x)' or '(5x)' next to cards that earned the multiplier",
+        "Add tests verifying multiplier thresholds and correct XP/gold output",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Research: aligning rewards to the SRS schedule produces 3x better 30-day retention than gamification or SRS alone (eLearning Industry). No SRS app currently rewards long-interval recalls with bigger bonuses."
+    },
+    {
+      "id": "US-019",
+      "title": "Replace hard streak reset with decay model and earn-back",
+      "description": "As a learner, I want a missed day to reduce my streak by a few days instead of resetting to zero, so one bad day doesn't destroy months of progress.",
+      "acceptanceCriteria": [
+        "In src/core/progression/StreakTracker.ts, change the missed-day logic: shields consumed first (unchanged), then if no shields, deduct min(5, floor(streak/4)) days instead of resetting to 0",
+        "If streak remains > 0 after decay, show 'Streak reduced to N days (was M)' message instead of 'Streak lost'",
+        "Add earn-back: if player reviews today after missing yesterday, recover half the deducted days (rounded down, minimum 1)",
+        "Update getStreakBonus() to work with the new decay values (thresholds unchanged: 3/7/14/30)",
+        "Add tests verifying decay calculation, shield priority, earn-back recovery, and bonus tier transitions",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "Research: breaking streaks increases binge-quit behavior by 47% (Cohorty). Duolingo's streak freeze increased weekly retention 4-5%. Decay model is strictly better than hard reset for retention."
+    },
+    {
+      "id": "US-020",
+      "title": "Add offline idle progression (gold and HP recovery while away)",
+      "description": "As a player, I want my character to earn capped gold and recover HP while I'm away, so returning to the game feels immediately rewarding.",
+      "acceptanceCriteria": [
+        "Add last_login_at TEXT column to player table via migration (default to current timestamp)",
+        "Add last_login_at field to Player type in src/types/player.ts",
+        "Create src/core/progression/IdleRewards.ts with calculateIdleRewards(lastLoginAt, now): gold = 30/hour capped at 8 hours (240 max), HP recovery = 10% maxHp/hour capped at full",
+        "In App.tsx on initial player load, compute idle rewards if last_login_at is > 1 hour ago",
+        "Award gold and HP, update last_login_at to now via PlayerRepository",
+        "Show a brief 'Welcome back! Earned N gold, recovered N HP while training' banner on hub screen for 3 seconds",
+        "Add tests verifying gold cap, HP cap, and time calculations",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "Idle game research: 'feeling of lost opportunity' from capped offline earnings creates gentle daily pull (Machinations.io). No SRS tool has idle progression."
+    },
+    {
+      "id": "US-021",
+      "title": "Add pre-combat encounter preview before committing to fight",
+      "description": "As a player, I want to see what I'm fighting before committing, so my choices feel strategic instead of random.",
+      "acceptanceCriteria": [
+        "In CombatScreen.tsx, add an 'encounter_preview' phase before the first card is shown",
+        "Preview displays: enemy name, tier, HP, estimated difficulty (average card difficulty from due cards), deck/topic name, potential XP and gold reward range",
+        "Show '[Enter] Fight' and '[Escape] Retreat' controls",
+        "If player retreats, return to hub with no penalties",
+        "If player fights, transition to normal combat flow",
+        "Dungeon floors show preview but don't allow retreat (show 'No turning back!' instead of Escape option)",
+        "Add tests verifying preview phase renders correct data and retreat works",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "Agency research: pre-action information (seeing randomness before deciding) is the key difference between meaningful choice and gambling (Thom.ee). All data for the preview already exists at combat preparation time."
+    },
+    {
+      "id": "US-022",
+      "title": "Wire equipment special effects into combat engine",
+      "description": "As a player, I want my equipment's special effects to actually work in combat, not just be display text.",
+      "acceptanceCriteria": [
+        "In CombatEngine.ts, add applySpecialEffects(quality, equippedItems) function that parses specialEffect strings",
+        "Implement effects: 'Perfect answers deal +N bonus damage' (add N to damage on Perfect), 'Correct answers heal N HP' (heal on Correct/Perfect), 'Critical hits deal double damage' (double crit damage), '+N% gold from combat' (multiply gold reward)",
+        "In App.tsx prepareCombat(), pass equipped items' special effects to CombatScreen",
+        "CombatScreen passes effects to resolveTurn() and applies them to the combat state",
+        "Show special effect activation in CombatLog (e.g., 'Scholar's Tome activates: +3 bonus damage!')",
+        "Add tests for each special effect type",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "23 equipment templates already have specialEffect strings but they're never evaluated. 'Rewards must feed back into the loop' — currently equipment drops feel hollow."
+    },
+    {
+      "id": "US-023",
+      "title": "Add rare card variant drop system (schema and logic)",
+      "description": "As a player, I want a small chance of earning collectible card variants after perfect recalls, adding a variable-ratio reward layer.",
+      "acceptanceCriteria": [
+        "Add variant TEXT DEFAULT NULL column to recall_stats table via migration (values: null, 'foil', 'golden', 'prismatic')",
+        "Create src/core/cards/CardVariants.ts with tryAwardVariant(consecutiveCorrect, currentVariant): requires 5+ consecutive correct and no existing variant",
+        "Drop rates: foil 4%, golden 0.9%, prismatic 0.1% (rolled only on Perfect quality answers)",
+        "Add awardVariant(cardId, variant) method to StatsRepository",
+        "In App.tsx handleReviewComplete() and handleCombatComplete(), call tryAwardVariant for each Perfect answer and persist if awarded",
+        "Add getVariantCounts() method to StatsRepository returning counts per variant type",
+        "Add tests verifying drop rate logic, consecutive correct requirement, and no-overwrite rule",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "Variable ratio schedules produce the strongest sustained engagement (Gamedeveloper.com). Pokemon collection compulsion confirmed by 30K+ downloads of Pokemanki Anki add-on."
+    },
+    {
+      "id": "US-024",
+      "title": "Display rare card variants in UI with visual treatments",
+      "description": "As a player, I want my rare card variants to look visually distinct and feel special during review and combat.",
+      "acceptanceCriteria": [
+        "In FlashcardFace.tsx, accept optional variant prop ('foil'|'golden'|'prismatic'|null)",
+        "Foil cards: cyan border + sparkle characters (✦) flanking the card title",
+        "Golden cards: yellow border + star characters (★) flanking the card title",
+        "Prismatic cards: magenta border + diamond characters (◆) flanking the card title",
+        "In ReviewSummary, show 'NEW VARIANT!' notification with variant name when a new variant is earned in the session",
+        "In StatsScreen, add a 'Collection' line showing variant counts (e.g., '✦ 12 Foil | ★ 3 Golden | ◆ 0 Prismatic')",
+        "Pass variant data from StatsRepository through CombatScreen and ReviewScreen to FlashcardFace",
+        "Add tests verifying variant prop renders correct border and symbols",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Depends on US-023 for schema and drop logic. Visual treatments use standard Unicode characters that render in all modern terminals."
+    },
+    {
+      "id": "US-025",
+      "title": "Add bestiary schema and enemy encounter tracking",
+      "description": "As a developer, I need a database table and repository to track which enemies the player has encountered and defeated.",
+      "acceptanceCriteria": [
+        "Add enemy_encounters table via migration: id INTEGER PRIMARY KEY, enemy_name TEXT NOT NULL, enemy_tier INTEGER NOT NULL, times_defeated INTEGER DEFAULT 0, first_defeated_at TEXT, last_defeated_at TEXT, UNIQUE(enemy_name, enemy_tier)",
+        "Create src/data/repositories/EnemyRepository.ts with trackEncounter(name, tier) that upserts the record (increment times_defeated, set timestamps)",
+        "Add getEncounters() returning all encounters sorted by tier then name",
+        "Add getEncounterCount() returning total unique enemies defeated",
+        "In App.tsx handleCombatComplete(), call enemyRepo.trackEncounter() with the defeated enemy's name and tier on victory",
+        "Add tests verifying upsert logic, timestamp updates, and query methods",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "Schema-first story. The UI screen (US-026) depends on this. Enemy names and tiers are already generated by EnemyGenerator.ts."
+    },
+    {
+      "id": "US-026",
+      "title": "Add Bestiary and Collection Gallery screen",
+      "description": "As a player, I want a gallery showing all enemies I've encountered and my card mastery progress per deck.",
+      "acceptanceCriteria": [
+        "Create src/components/screens/BestiaryScreen.tsx showing two tabs: 'Enemies' and 'Collection'",
+        "Enemies tab: list all encountered enemies grouped by tier (Minion/Common/Elite/Boss) showing name, times defeated, first encounter date",
+        "Show unencountered enemies from EnemyGenerator name pools as '???' with dimmed text",
+        "Collection tab: for each deck, show total cards, mastered count (evolution tier 3), and completion percentage bar",
+        "Add 'Bestiary' option to HubScreen menu (e.g., key [0] or append to existing menu)",
+        "Use up/down arrow navigation with Tab to switch between Enemies and Collection tabs",
+        "Add tests verifying screen renders encounters and collection stats correctly",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "Depends on US-025 for enemy tracking data. Collection stats can be derived from existing StatsRepository.getDeckMasteryStats()."
+    },
+    {
+      "id": "US-027",
+      "title": "Add narrative lore fragments on combat defeat",
+      "description": "As a player, I want failed combats to reveal world lore, so every run feels meaningful even in defeat (Hades-style).",
+      "acceptanceCriteria": [
+        "Create src/core/narrative/LoreFragments.ts with 20 lore entries: { id, text, tier } where tier maps to enemy tier (1-4) for thematic matching",
+        "Lore themes: world history, enemy origins, ancient scholars, forgotten knowledge, combat wisdom — tied to the learning/recall fantasy",
+        "In CombatScreen.tsx, on defeat show a LoreReveal component: dim border, italicized lore text, '...a memory surfaces as consciousness fades...' flavor text",
+        "Track seen lore IDs in session state to avoid repeats within the same session (across sessions, repeats are OK since there are only 20)",
+        "Show 'You fell, but strengthened N memory traces' message counting cards reviewed in the lost combat",
+        "Player presses Enter to continue to hub/reflection",
+        "Add tests verifying lore selection by tier and no same-session repeats",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "Hades proved making death meaningful transforms frustration into motivation. Failed runs still produce SRS learning data — making that visible reframes defeat as progress."
+    },
+    {
+      "id": "US-028",
+      "title": "Add terminal title bar updates and enhanced notifications",
+      "description": "As a player, I want the terminal title bar to reflect my current game state and get system notifications on key events.",
+      "acceptanceCriteria": [
+        "Create src/utils/TerminalTitle.ts with setTerminalTitle(text) using OSC escape: process.stdout.write('\\x1b]0;' + text + '\\x07')",
+        "Add clearTerminalTitle() that resets title to empty string on app exit",
+        "In App.tsx, update terminal title on each screen transition: 'Realm of Recall — Hub', 'Realm of Recall — Combat vs [enemy]', 'Realm of Recall — Floor [N]', etc.",
+        "Add BEL (\\x07) notifications on: achievement unlock, streak milestone (7/30/100), rare card variant drop, dungeon completion",
+        "Gate title updates and BEL behind REALM_NO_ANIMATION check (reuse existing animationsEnabled())",
+        "Clean up terminal title in App.tsx useEffect cleanup on unmount",
+        "Add tests verifying setTerminalTitle produces correct escape sequence",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "OSC title update is a single escape sequence. BEL is already partially implemented for level-up. Gating behind REALM_NO_ANIMATION keeps accessibility consistent."
+    },
+    {
+      "id": "US-029",
+      "title": "Add meta-progression unlock definitions and schema",
+      "description": "As a developer, I need a system to define and persist permanent unlocks earned through ascension progression.",
+      "acceptanceCriteria": [
+        "Add unlocks table via migration: id INTEGER PRIMARY KEY, key TEXT UNIQUE NOT NULL, unlocked_at TEXT DEFAULT NULL",
+        "Create src/core/progression/MetaUnlocks.ts defining 8 unlocks: Reversed Mode (ascension 1), Teach Mode (ascension 2), Connect Mode (ascension 3), Prismatic Variants (ascension 4), Extended Dungeon (ascension 5, adds floors 6-8), Nightmare Enemies (ascension 7, new enemy name pool), Master Title (ascension 10, cosmetic title)",
+        "Add getRequiredAscension(unlockKey) and getAllUnlocks() functions",
+        "Create src/data/repositories/UnlockRepository.ts with unlock(key), isUnlocked(key), getUnlockedKeys() methods",
+        "In App.tsx, after player ascends (ascension level increases), check and award any newly earned unlocks via UnlockRepository",
+        "Add tests verifying unlock definitions, ascension thresholds, and repository persistence",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Schema-first story. The enforcement and UI (US-030) depends on this. Follows Slay the Spire's gradual unlock model — gating complexity prevents overwhelming new players."
+    },
+    {
+      "id": "US-030",
+      "title": "Enforce meta-progression unlocks in game systems and show in UI",
+      "description": "As a player, I want ascension unlocks to gate content, so ascending feels meaningful and new mechanics are introduced gradually.",
+      "acceptanceCriteria": [
+        "In ModeSelector.ts selectMode(), check UnlockRepository — only include Reversed/Teach/Connect modes if their unlock key is unlocked (Standard always available)",
+        "In CardVariants.ts tryAwardVariant(), only allow prismatic drops if 'prismatic_variants' is unlocked",
+        "In DungeonRun.ts, extend FLOOR_CONFIGS to include floors 6-8 (scaling 3.5x/4.0x/5.0x HP) only if 'extended_dungeon' is unlocked",
+        "In AchievementScreen or StatsScreen, add a 'Meta-Progression' section showing all 8 unlocks with locked/unlocked status and required ascension level",
+        "Show 'New Unlock!' notification text on hub when a fresh unlock is earned",
+        "Add tests verifying mode gating, variant gating, dungeon extension, and UI display",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Depends on US-029 for unlock schema and definitions. This story wires unlocks into existing game systems."
+    },
+    {
+      "id": "US-031",
+      "title": "Update CHANGELOG, README, and version bump to 0.6.0",
+      "description": "As a developer, I want documentation updated for the full Learning Perfection update including all research-backed features.",
+      "acceptanceCriteria": [
+        "Bump version to 0.6.0 in package.json",
+        "Add [0.6.0] section to CHANGELOG.md documenting all features: disconnected system fixes (US-001-005), learning science features (US-006-017), and research-backed improvements (US-018-030)",
+        "Update README.md Features section with new capabilities",
+        "Update test count in README",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Final story. Run after all feature stories are complete."
+    }
+  ]
+}

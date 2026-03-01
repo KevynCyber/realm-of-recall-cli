@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { Card } from "../../types/index.js";
@@ -11,6 +11,8 @@ import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { generateHint, getMaxHintLevel, isFullReveal } from "../../core/cards/HintGenerator.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
+import { getDatabase } from "../../data/database.js";
+import { StatsRepository } from "../../data/repositories/StatsRepository.js";
 
 export interface ReviewResult {
   cardId: string;
@@ -51,6 +53,21 @@ export function ReviewScreen({
   onComplete,
   mode = RetrievalMode.Standard,
 }: Props) {
+  // Look up evolution tiers for all cards
+  const cardTiers = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const tiers = new Map<string, number>();
+      for (const c of cards) {
+        tiers.set(c.id, statsRepo.getCardEvolutionTier(c.id));
+      }
+      return tiers;
+    } catch {
+      return new Map<string, number>();
+    }
+  }, [cards]);
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("question");
   const [input, setInput] = useState("");
@@ -283,6 +300,7 @@ export function ReviewScreen({
             phase === "feedback" ||
             phase === "confidence"
           }
+          evolutionTier={cardTiers.get(card.id) ?? 0}
         />
       )}
 
