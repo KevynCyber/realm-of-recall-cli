@@ -7,6 +7,7 @@ import type { Player } from "../../types/index.js";
 interface Props {
   player: Player;
   cardsDue: number;
+  breakWarning?: string;
 }
 
 function hpBarColor(hp: number, maxHp: number): string {
@@ -22,7 +23,7 @@ function renderBar(current: number, max: number, width: number): string {
   return "\u2588".repeat(filled) + "\u2591".repeat(empty);
 }
 
-export function StatusBar({ player, cardsDue }: Props) {
+export function StatusBar({ player, cardsDue, breakWarning }: Props) {
   const theme = useGameTheme();
   const xpNeeded = xpToNextLevel(player.level);
   const barWidth = 10;
@@ -51,6 +52,11 @@ export function StatusBar({ player, cardsDue }: Props) {
       <Text>
         Due: {cardsDue}
       </Text>
+      {breakWarning && (
+        <Text color={theme.colors.warning} dimColor>
+          {breakWarning}
+        </Text>
+      )}
     </Box>
   );
 }

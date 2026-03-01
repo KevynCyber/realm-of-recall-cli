@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { ThemeProvider } from "./ThemeProvider.js";
 import { Header } from "./Header.js";
 import { StatusBar } from "./StatusBar.js";
+import { BreakSuggestion } from "./BreakSuggestion.js";
 import { TitleScreen } from "../screens/TitleScreen.js";
 import { HubScreen } from "../screens/HubScreen.js";
 import { CombatScreen } from "../screens/CombatScreen.js";
@@ -73,6 +74,12 @@ import {
 } from "../../core/combat/DailyChallenge.js";
 import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents.js";
 import { playBel } from "../../core/ui/TerminalEffects.js";
+import {
+  getBreakLevel,
+  getBreakMessage,
+  isBreakSuppressed,
+} from "../../core/session/SessionGuardrails.js";
+import type { BreakLevel } from "../../core/session/SessionGuardrails.js";
 import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.js";
 import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
 import type {
@@ -200,6 +207,13 @@ export default function App() {
     undefined,
   );
 
+  // Session timing for break suggestions
+  const [sessionStartMs] = useState<number>(Date.now());
+  const [breakLevel, setBreakLevel] = useState<BreakLevel>("none");
+  const [breakDismissed, setBreakDismissed] = useState(false);
+  const [showBreakScreen, setShowBreakScreen] = useState(false);
+  const sessionCardsReviewed = useRef(0);
+
   // Marginal gains data for stats screen
   const [accuracyTrend, setAccuracyTrend] = useState<TrendResult | undefined>(
     undefined,
@@ -257,6 +271,16 @@ export default function App() {
       // ignore — show title screen
     }
   }, []);
+
+  // Poll session duration every 30s to update break level
+  useEffect(() => {
+    if (isBreakSuppressed()) return;
+    const interval = setInterval(() => {
+      const level = getBreakLevel(sessionStartMs, Date.now());
+      setBreakLevel(level);
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [sessionStartMs]);
 
   const checkAchievements = useCallback((updatedPlayer: Player) => {
     try {
@@ -659,6 +683,14 @@ export default function App() {
 
         checkAchievements(updated);
         refreshCardsDue();
+        sessionCardsReviewed.current += result.cardsReviewed;
+
+        // Check if we should show the break screen (hard threshold, between screens)
+        const combatBreakLevel = getBreakLevel(sessionStartMs, Date.now());
+        if (combatBreakLevel === "hard" && !breakDismissed && !isBreakSuppressed()) {
+          setBreakLevel(combatBreakLevel);
+          setShowBreakScreen(true);
+        }
 
         // If this was a dungeon floor combat, route results back to dungeon
         if (isDungeonFloor) {
@@ -806,6 +838,15 @@ export default function App() {
         setReflectionDeckId(undefined);
 
         refreshCardsDue();
+        sessionCardsReviewed.current += results.length;
+
+        // Check if we should show the break screen (hard threshold, between screens)
+        const reviewBreakLevel = getBreakLevel(sessionStartMs, Date.now());
+        if (reviewBreakLevel === "hard" && !breakDismissed && !isBreakSuppressed()) {
+          setBreakLevel(reviewBreakLevel);
+          setShowBreakScreen(true);
+        }
+
         setScreen("review_summary");
       } catch (err: any) {
         console.error("Error saving review results:", err.message);
@@ -1276,9 +1317,35 @@ export default function App() {
               streakAtRisk={streakAtRisk}
             />
           )}
-          <Box flexGrow={1}>{renderContent()}</Box>
+          <Box flexGrow={1}>
+            {showBreakScreen && !isBreakSuppressed() ? (
+              <BreakSuggestion
+                sessionElapsedMs={Date.now() - sessionStartMs}
+                cardsReviewed={sessionCardsReviewed.current}
+                onDismiss={() => {
+                  setShowBreakScreen(false);
+                  setBreakDismissed(true);
+                }}
+                onReturnToHub={() => {
+                  setShowBreakScreen(false);
+                  setBreakDismissed(true);
+                  setScreen("hub");
+                }}
+              />
+            ) : (
+              renderContent()
+            )}
+          </Box>
           {player && screen !== "title" && (
-            <StatusBar player={player} cardsDue={cardsDue} />
+            <StatusBar
+              player={player}
+              cardsDue={cardsDue}
+              breakWarning={
+                breakLevel === "soft" && !breakDismissed && !isBreakSuppressed()
+                  ? getBreakMessage("soft")
+                  : undefined
+              }
+            />
           )}
         </Box>
       </NavigationContext.Provider>
