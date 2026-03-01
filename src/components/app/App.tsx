@@ -61,6 +61,7 @@ import {
 } from "../../core/reflection/ReflectionEngine.js";
 import { evaluateEvolutionTier } from "../../core/cards/CardEvolution.js";
 import type { EvolutionTier } from "../../core/cards/CardEvolution.js";
+import { tryAwardVariant } from "../../core/cards/CardVariants.js";
 import {
   calculateTrend,
 } from "../../core/analytics/MarginalGains.js";
@@ -770,6 +771,18 @@ export default function App() {
             updatedSchedule,
             tier,
           );
+
+          // Try to award a rare card variant on Perfect answers
+          if ((quality as AnswerQuality) === AnswerQuality.Perfect) {
+            const currentVariant = statsRepo.getCardVariant(card.id);
+            const variant = tryAwardVariant(
+              newConsecutive,
+              currentVariant as any,
+            );
+            if (variant) {
+              statsRepo.awardVariant(card.id, variant);
+            }
+          }
         }
 
         checkAchievements(updated);
@@ -912,6 +925,18 @@ export default function App() {
             updatedSchedule,
             tier,
           );
+
+          // Try to award a rare card variant on Perfect answers
+          if (result.quality === AnswerQuality.Perfect) {
+            const currentVariant = statsRepo.getCardVariant(result.cardId);
+            const variant = tryAwardVariant(
+              newConsecutive,
+              currentVariant as any,
+            );
+            if (variant) {
+              statsRepo.awardVariant(result.cardId, variant);
+            }
+          }
         }
 
         // Award XP for reviewing (Deep Focus perk: +10%) plus retention bonus

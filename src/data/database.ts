@@ -254,4 +254,8 @@ const migrations = [
     name: "010_last_login_at",
     sql: `ALTER TABLE player ADD COLUMN last_login_at TEXT;`,
   },
+  {
+    name: "011_card_variants",
+    sql: `ALTER TABLE recall_stats ADD COLUMN variant TEXT DEFAULT NULL;`,
+  },
 ];
