@@ -53,6 +53,54 @@ describe("JsonImporter", () => {
     expect(cards[0].acceptableAnswers).toEqual(["A"]);
     expect(cards[0].type).toBe(CardType.Basic);
   });
+
+  it("rejects JSON missing name", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ cards: [{ front: "Q", back: "A" }] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects JSON with empty name", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "", cards: [{ front: "Q", back: "A" }] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects JSON missing cards array", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "Deck" }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects JSON with empty cards array", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "Deck", cards: [] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects card with empty front", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "Deck", cards: [{ front: "", back: "A" }] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects card missing back", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "Deck", cards: [{ front: "Q" }] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects non-object JSON", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify("just a string"));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
+
+  it("rejects cards with wrong type for front", () => {
+    const filePath = path.join(tmpDir, "bad.json");
+    fs.writeFileSync(filePath, JSON.stringify({ name: "Deck", cards: [{ front: 123, back: "A" }] }));
+    expect(() => importJson(filePath)).toThrow("Invalid deck JSON");
+  });
 });
 
 describe("CsvImporter", () => {
