@@ -30,6 +30,12 @@ const META_UNLOCKS: MetaUnlock[] = [
     requiredAscension: 3,
   },
   {
+    key: "generate_mode",
+    name: "Generate Mode",
+    description: "Answer from partial cues — first letter + blanks",
+    requiredAscension: 2,
+  },
+  {
     key: "prismatic_variants",
     name: "Prismatic Variants",
     description: "Prismatic card variants can now drop",

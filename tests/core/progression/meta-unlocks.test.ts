@@ -10,9 +10,9 @@ import {
 
 describe("MetaUnlocks", () => {
   describe("getAllUnlocks", () => {
-    it("returns 7 unlock definitions", () => {
+    it("returns 8 unlock definitions", () => {
       const unlocks = getAllUnlocks();
-      expect(unlocks).toHaveLength(7);
+      expect(unlocks).toHaveLength(8);
     });
 
     it("each unlock has key, name, description, and requiredAscension", () => {
@@ -84,30 +84,31 @@ describe("MetaUnlocks", () => {
       expect(unlocks[0].key).toBe("reversed_mode");
     });
 
-    it("returns 3 unlocks at ascension 3", () => {
+    it("returns 4 unlocks at ascension 3", () => {
       const unlocks = getUnlocksForAscension(3);
-      expect(unlocks).toHaveLength(3);
+      expect(unlocks).toHaveLength(4);
       const keys = unlocks.map((u) => u.key);
       expect(keys).toContain("reversed_mode");
       expect(keys).toContain("teach_mode");
       expect(keys).toContain("connect_mode");
+      expect(keys).toContain("generate_mode");
     });
 
-    it("returns 5 unlocks at ascension 5", () => {
+    it("returns 6 unlocks at ascension 5", () => {
       const unlocks = getUnlocksForAscension(5);
-      expect(unlocks).toHaveLength(5);
+      expect(unlocks).toHaveLength(6);
     });
 
-    it("returns 6 unlocks at ascension 7 (skips 6)", () => {
+    it("returns 7 unlocks at ascension 7 (skips 6)", () => {
       const unlocks = getUnlocksForAscension(7);
-      expect(unlocks).toHaveLength(6);
+      expect(unlocks).toHaveLength(7);
       const keys = unlocks.map((u) => u.key);
       expect(keys).toContain("nightmare_enemies");
     });
 
-    it("returns all 7 unlocks at ascension 10", () => {
+    it("returns all 8 unlocks at ascension 10", () => {
       const unlocks = getUnlocksForAscension(10);
-      expect(unlocks).toHaveLength(7);
+      expect(unlocks).toHaveLength(8);
     });
   });
 });
@@ -179,10 +180,11 @@ describe("UnlockRepository", () => {
       }
 
       const keys = unlockRepo.getUnlockedKeys();
-      expect(keys.size).toBe(3);
+      expect(keys.size).toBe(4);
       expect(keys.has("reversed_mode")).toBe(true);
       expect(keys.has("teach_mode")).toBe(true);
       expect(keys.has("connect_mode")).toBe(true);
+      expect(keys.has("generate_mode")).toBe(true);
       expect(keys.has("prismatic_variants")).toBe(false);
     });
 

@@ -55,3 +55,27 @@ export function getMaxHintLevel(): number {
 export function isFullReveal(level: number): boolean {
   return level >= 3;
 }
+
+/**
+ * Generate a partial cue for the Generation Effect retrieval mode.
+ * Shows only the first letter of each word and underscores for the rest.
+ * This forces the learner to generate the answer from minimal cues (Bertsch et al. 2007).
+ *
+ * Examples:
+ *   "Paris" → "P____"
+ *   "New York" → "N__ Y___"
+ *   "A" → "A"
+ *   "" → ""
+ */
+export function generatePartialCue(answer: string): string {
+  if (answer.length === 0) return "";
+
+  return answer
+    .split(" ")
+    .map((word) => {
+      if (word.length === 0) return "";
+      if (word.length === 1) return word[0];
+      return word[0] + "_".repeat(word.length - 1);
+    })
+    .join(" ");
+}
