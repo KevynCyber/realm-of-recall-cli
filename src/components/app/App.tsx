@@ -150,6 +150,25 @@ function getTodayUTC(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+/**
+ * Determine whether a batch of cards is mostly new (>50% have no schedule
+ * or card_state === 'new'). Returns "new" or "review" for use with selectMode.
+ */
+export function getMajorityCardState(
+  cards: Card[],
+  statsRepo: StatsRepository,
+): string {
+  if (cards.length === 0) return "review";
+  let newCount = 0;
+  for (const card of cards) {
+    const schedule = statsRepo.getSchedule(card.id);
+    if (!schedule || schedule.state === "new") {
+      newCount++;
+    }
+  }
+  return newCount > cards.length / 2 ? "new" : "review";
+}
+
 export default function App() {
   const { exit } = useApp();
   const [screen, setScreen] = useState<Screen>("title");
@@ -504,7 +523,8 @@ export default function App() {
         const settings = applyAscensionToCombat(baseSettings, player.ascensionLevel);
 
         // Select retrieval mode for combat (gated by meta-progression unlocks)
-        const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
+        const cardState = getMajorityCardState(cards, statsRepo);
+        const mode = selectMode(cardState, [], sessionModes, Math.random, unlockedKeys);
         setCurrentRetrievalMode(mode);
         setSessionModes((prev) => [...prev, mode]);
 
@@ -543,7 +563,8 @@ export default function App() {
               .filter((c): c is Card => c !== undefined);
             if (cards.length === 0) break;
             // Select retrieval mode for this review session (gated by meta-progression unlocks)
-            const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
+            const cardState = getMajorityCardState(cards, statsRepo);
+            const mode = selectMode(cardState, [], sessionModes, Math.random, unlockedKeys);
             setCurrentRetrievalMode(mode);
             setSessionModes((prev) => [...prev, mode]);
             setCombatCards(cards);
@@ -1123,7 +1144,9 @@ export default function App() {
           return;
         }
         // Select retrieval mode for the catch-up review session (gated by meta-progression unlocks)
-        const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
+        const statsRepo = new StatsRepository(db);
+        const cardState = getMajorityCardState(cards, statsRepo);
+        const mode = selectMode(cardState, [], sessionModes, Math.random, unlockedKeys);
         setCurrentRetrievalMode(mode);
         setSessionModes((prev) => [...prev, mode]);
         setCombatCards(cards);
