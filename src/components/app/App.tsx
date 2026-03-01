@@ -939,7 +939,7 @@ export default function App() {
         }
       }
     },
-    [player, combatCards, refreshCardsDue, checkAchievements, isDungeonFloor, unlockedKeys],
+    [player, combatCards, combatEnemy, combatSettings, breakDismissed, refreshCardsDue, checkAchievements, isDungeonFloor, unlockedKeys],
   );
 
   const handleReviewComplete = useCallback(
