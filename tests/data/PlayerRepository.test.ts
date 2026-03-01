@@ -36,6 +36,7 @@ const testPlayer: Player = {
   dailyChallengeDate: null,
   desiredRetention: 0.9,
   maxNewCardsPerDay: 20,
+  timerSeconds: 30,
   createdAt: new Date().toISOString(),
 };
 
@@ -136,5 +137,24 @@ describe("PlayerRepository", () => {
     playerRepo.updatePlayer({ ...testPlayer, maxNewCardsPerDay: 50 });
     const player = playerRepo.getPlayer();
     expect(player!.maxNewCardsPerDay).toBe(50);
+  });
+
+  it("persists timerSeconds with default value", () => {
+    playerRepo.createPlayer(testPlayer);
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(30);
+  });
+
+  it("persists custom timerSeconds value", () => {
+    playerRepo.createPlayer({ ...testPlayer, timerSeconds: 45 });
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(45);
+  });
+
+  it("updates timerSeconds", () => {
+    playerRepo.createPlayer(testPlayer);
+    playerRepo.updatePlayer({ ...testPlayer, timerSeconds: 0 });
+    const player = playerRepo.getPlayer();
+    expect(player!.timerSeconds).toBe(0);
   });
 });

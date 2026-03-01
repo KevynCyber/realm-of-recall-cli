@@ -69,7 +69,7 @@ export function applyAscensionToCombat(
 
   const settings = { ...baseSettings };
 
-  if (ascensionLevel >= 2) settings.timerSeconds = Math.max(10, settings.timerSeconds - 5);
+  if (ascensionLevel >= 2 && settings.timerSeconds > 0) settings.timerSeconds = Math.max(10, settings.timerSeconds - 5);
   if (ascensionLevel >= 3) settings.partialCreditEnabled = false;
   if (ascensionLevel >= 5) settings.startingHpPercent = 80;
   if (ascensionLevel >= 6) settings.lootDropMultiplier *= 0.5;

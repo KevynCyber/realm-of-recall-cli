@@ -408,8 +408,10 @@ export default function App() {
           enemy = applyAscensionToEnemy(enemy, player.ascensionLevel);
         }
 
-        // Apply ascension modifiers to combat settings
-        const settings = applyAscensionToCombat(getDefaultCombatSettings(), player.ascensionLevel);
+        // Apply ascension modifiers to combat settings (use player's configured timer)
+        const baseSettings = getDefaultCombatSettings();
+        baseSettings.timerSeconds = player.timerSeconds;
+        const settings = applyAscensionToCombat(baseSettings, player.ascensionLevel);
 
         // Select retrieval mode for combat
         const mode = selectMode("review", [], sessionModes);
@@ -1144,6 +1146,10 @@ export default function App() {
             cards={combatCards}
             onComplete={handleReviewComplete}
             mode={currentRetrievalMode}
+            timerSeconds={applyAscensionToCombat(
+              { ...getDefaultCombatSettings(), timerSeconds: player?.timerSeconds ?? 30 },
+              player?.ascensionLevel ?? 0,
+            ).timerSeconds}
           />
         );
       case "review_summary":
@@ -1247,6 +1253,17 @@ export default function App() {
                 playerRepo.updatePlayer(updated);
                 setPlayer(updated);
                 refreshCardsDue();
+              } catch {
+                // ignore
+              }
+            }}
+            onUpdateTimer={(timerSeconds: number) => {
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = { ...player, timerSeconds };
+                playerRepo.updatePlayer(updated);
+                setPlayer(updated);
               } catch {
                 // ignore
               }

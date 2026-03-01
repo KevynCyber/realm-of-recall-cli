@@ -161,7 +161,8 @@ export function CombatScreen({
   const currentCard = cardQueue[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
   const currentHealth = currentCard ? (cardHealthMap.get(currentCard.id) ?? "healthy") : "healthy";
-  const totalTime = combatSettings?.timerSeconds ?? 30; // seconds per card
+  const configuredTimer = combatSettings?.timerSeconds ?? 30;
+  const totalTime = configuredTimer === 0 ? Infinity : configuredTimer; // 0 = disabled
 
   // -- Intro phase: show enemy appearance message, then transition to card --
   useEffect(() => {
