@@ -243,6 +243,9 @@ export default function App() {
   const [backlogOverdueCount, setBacklogOverdueCount] = useState(0);
   const [backlogOverdueCardIds, setBacklogOverdueCardIds] = useState<string[]>([]);
 
+  // Lore fragments session state (track seen IDs to avoid repeats)
+  const [seenLoreIds, setSeenLoreIds] = useState<Set<number>>(new Set());
+
   // Idle progression banner
   const [idleBanner, setIdleBanner] = useState<string | null>(null);
 
@@ -1277,6 +1280,8 @@ export default function App() {
             retrievalMode={currentRetrievalMode}
             startingHpOverride={isDungeonFloor ? dungeonCombatStartHp : undefined}
             isDungeonFloor={isDungeonFloor}
+            seenLoreIds={seenLoreIds}
+            onLoreSeen={(id) => setSeenLoreIds((prev) => new Set([...prev, id]))}
             onRetreat={() => setScreen("hub")}
             onComplete={handleCombatComplete}
           />
