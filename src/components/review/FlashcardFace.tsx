@@ -22,6 +22,7 @@ interface Props {
   evolutionTier?: number;
   cardHealth?: "healthy" | "struggling" | "leech";
   consecutiveCorrect?: number;
+  isRetry?: boolean;
 }
 
 export function FlashcardFace({
@@ -30,6 +31,7 @@ export function FlashcardFace({
   evolutionTier,
   cardHealth,
   consecutiveCorrect,
+  isRetry,
 }: Props) {
   const isCloze = card.type === CardType.ClozeDeletion;
   const frontText = isCloze ? parseCloze(card.front).displayText : card.front;
@@ -83,6 +85,9 @@ export function FlashcardFace({
         </Text>
         {tier > 0 && (
           <Text dimColor> [{tierName}]</Text>
+        )}
+        {isRetry && (
+          <Text color="yellow" bold> [Retry]</Text>
         )}
       </Box>
       <Text>{showAnswer ? card.back : frontText}</Text>

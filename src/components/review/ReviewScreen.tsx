@@ -86,6 +86,12 @@ export function ReviewScreen({
     }
   }, [cards]);
 
+  // Successive relearning: mutable card queue and re-queue tracking
+  const MAX_REQUEUES = 2;
+  const [cardQueue, setCardQueue] = useState<Card[]>(() => [...cards]);
+  const [requeueCounts, setRequeueCounts] = useState<Map<string, number>>(
+    () => new Map(),
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("question");
   const [input, setInput] = useState("");
@@ -100,7 +106,7 @@ export function ReviewScreen({
   const [hintLevel, setHintLevel] = useState(0);
   const [showHint, setShowHint] = useState(false);
 
-  const card = cards[currentIndex];
+  const card = cardQueue[currentIndex];
   const totalTime = 30; // seconds
   const isTeach = mode === RetrievalMode.Teach;
 
@@ -111,12 +117,44 @@ export function ReviewScreen({
   // ------------------------------------------------------------------ handlers
 
   /**
+   * Re-queue a failed card to the end of the queue for successive relearning.
+   * Max 2 re-queues per card to avoid infinite loops.
+   */
+  const requeueCard = useCallback(
+    (failedCard: Card) => {
+      const count = requeueCounts.get(failedCard.id) ?? 0;
+      if (count < MAX_REQUEUES) {
+        setCardQueue((prev) => [...prev, failedCard]);
+        setRequeueCounts((prev) => {
+          const next = new Map(prev);
+          next.set(failedCard.id, count + 1);
+          return next;
+        });
+      }
+    },
+    [requeueCounts],
+  );
+
+  /**
    * Advance to next card or complete the review session.
    * `extras` lets callers attach optional fields (confidence, responseText, etc.)
    * that get merged into the *current* result that was already pushed.
+   * `qualityOverride` allows callers to pass the quality directly (needed when
+   * setLastQuality hasn't yet flushed, e.g. teach_rate phase).
    */
   const advanceCard = useCallback(
-    (extras?: Partial<ReviewResult>) => {
+    (extras?: Partial<ReviewResult>, qualityOverride?: AnswerQuality) => {
+      // Re-queue failed cards for successive relearning
+      const quality = qualityOverride ?? lastQuality;
+      if (
+        card &&
+        quality !== null &&
+        (quality === AnswerQuality.Wrong ||
+          quality === AnswerQuality.Timeout)
+      ) {
+        requeueCard(card);
+      }
+
       setResults((prev) => {
         const updated = [...prev];
         if (extras && updated.length > 0) {
@@ -125,14 +163,14 @@ export function ReviewScreen({
             ...extras,
           };
         }
-        if (currentIndex + 1 >= cards.length) {
+        if (currentIndex + 1 >= cardQueue.length) {
           // Use setTimeout so we don't call onComplete during render
           setTimeout(() => onComplete(updated), 0);
           return updated;
         }
         return updated;
       });
-      if (currentIndex + 1 < cards.length) {
+      if (currentIndex + 1 < cardQueue.length) {
         setCurrentIndex((i) => i + 1);
         setPhase("question");
         setInput("");
@@ -143,7 +181,7 @@ export function ReviewScreen({
         setShowHint(false);
       }
     },
-    [cards.length, currentIndex, onComplete],
+    [cardQueue.length, currentIndex, onComplete, card, lastQuality, requeueCard],
   );
 
   // Standard / Reversed answer submission
@@ -259,8 +297,8 @@ export function ReviewScreen({
         if (quality !== AnswerQuality.Wrong) {
           setPhase("confidence");
         } else {
-          // Wrong — skip confidence, advance
-          advanceCard({ quality, responseText: pendingResponseText });
+          // Wrong — skip confidence, advance (pass quality for re-queue check)
+          advanceCard({ quality, responseText: pendingResponseText }, quality);
         }
       }
     },
@@ -294,7 +332,7 @@ export function ReviewScreen({
       (phase === "feedback" || phase === "confidence" || phase === "teach_rate"
         ? 1
         : 0)) /
-    cards.length;
+    cardQueue.length;
 
   /** Human-friendly mode label */
   const modeLabel =
@@ -307,7 +345,7 @@ export function ReviewScreen({
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
         <Text dimColor>
-          Card {currentIndex + 1}/{cards.length}{" "}
+          Card {currentIndex + 1}/{cardQueue.length}{" "}
         </Text>
         <ProgressBar value={progress} width={30} />
         <Text dimColor>{"  "}Mode: </Text>
@@ -329,6 +367,7 @@ export function ReviewScreen({
           }
           evolutionTier={cardTiers.get(card.id) ?? 0}
           cardHealth={cardHealthMap.get(card.id) ?? "healthy"}
+          isRetry={(requeueCounts.get(card.id) ?? 0) > 0 && currentIndex >= cards.length}
         />
       )}
 
