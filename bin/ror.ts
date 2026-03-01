@@ -4,6 +4,7 @@ import React from "react";
 import { render } from "ink";
 import App from "../src/components/app/App.js";
 import { ImportCommand } from "../src/commands/import.js";
+import { ExportCommand } from "../src/commands/export.js";
 import { closeDatabase } from "../src/data/database.js";
 
 const program = new Command();
@@ -26,6 +27,19 @@ program
   .action((file: string) => {
     const { waitUntilExit } = render(
       React.createElement(ImportCommand, { filePath: file }),
+    );
+    waitUntilExit().then(() => {
+      closeDatabase();
+      process.exit(0);
+    });
+  });
+
+program
+  .command("export [directory]")
+  .description("Export all decks, cards, and progress to a JSON file")
+  .action((directory?: string) => {
+    const { waitUntilExit } = render(
+      React.createElement(ExportCommand, { directory }),
     );
     waitUntilExit().then(() => {
       closeDatabase();
