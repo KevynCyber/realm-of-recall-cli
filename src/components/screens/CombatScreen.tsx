@@ -337,7 +337,7 @@ export function CombatScreen({
       if (!currentCard) return;
       // Save snapshot for undo before processing
       setPreAnswerSnapshot({
-        combat: JSON.parse(JSON.stringify(combat)),
+        combat: structuredClone(combat),
         cardQueue: [...cardQueue],
         requeueCounts: new Map(requeueCounts),
         activeEffects: activeEffects.map((e) => ({ ...e })),
