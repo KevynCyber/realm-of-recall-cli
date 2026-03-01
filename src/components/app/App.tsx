@@ -97,6 +97,7 @@ import { calculateIdleRewards } from "../../core/progression/IdleRewards.js";
 import { getUnlocksForAscension } from "../../core/progression/MetaUnlocks.js";
 import { UnlockRepository } from "../../data/repositories/UnlockRepository.js";
 import type { BreakLevel } from "../../core/session/SessionGuardrails.js";
+import { debugLog } from "../../utils/debugLog.js";
 import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.js";
 import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
 import type {
@@ -332,8 +333,7 @@ export default function App() {
       const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
       setCardsDue(cardIds.length);
       setNewCardsRemaining(remaining);
-    } catch {
-      // ignore
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -343,8 +343,7 @@ export default function App() {
       const playerRepo = new PlayerRepository(db);
       const p = playerRepo.getPlayer();
       if (p) setPlayer(p);
-    } catch {
-      // ignore
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -404,8 +403,7 @@ export default function App() {
           setScreen("hub");
         }
       }
-    } catch {
-      // ignore — show title screen
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -463,8 +461,7 @@ export default function App() {
         achievementRepo.unlock(achievement.key, achievement.title, achievement.description);
       }
       if (newAchievements.length > 0) playBel();
-    } catch {
-      // ignore
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -542,7 +539,7 @@ export default function App() {
         setCombatSettings(settings);
         setEquippedItems(equipped);
         return true;
-      } catch {
+      } catch (e) { debugLog("App", e);
         return false;
       }
     },
@@ -578,8 +575,7 @@ export default function App() {
             setCombatCards(cards);
             setReviewResults([]);
             setScreen("review");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -596,8 +592,7 @@ export default function App() {
               }>,
             );
             setScreen("inventory");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -627,8 +622,7 @@ export default function App() {
             setMapAscensionLevel(player.ascensionLevel);
             setMapCanAscend(canUnlockNextAscension(player.ascensionLevel, zones));
             setScreen("map");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -683,14 +677,13 @@ export default function App() {
               } else {
                 setSpeedTrend(undefined);
               }
-            } catch {
+            } catch (e) { debugLog("App", e);
               setAccuracyTrend(undefined);
               setSpeedTrend(undefined);
             }
 
             setScreen("stats");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -708,8 +701,7 @@ export default function App() {
             }));
             setDeckData(infos);
             setScreen("decks");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -719,8 +711,7 @@ export default function App() {
             const achievementRepo = new AchievementRepository(db);
             setUnlockedAchievementKeys(achievementRepo.getUnlockedKeys());
             setScreen("achievements");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -739,8 +730,7 @@ export default function App() {
             }));
             setBestiaryCollectionStats(cs);
             setScreen("bestiary");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -754,8 +744,7 @@ export default function App() {
             const config = generateDailyChallenge(seed, allCards, player.level);
             setDailyChallengeConfig(config);
             setScreen("daily_challenge");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -773,8 +762,7 @@ export default function App() {
             const cardRepo = new CardRepository(db);
             setCardCreatorDecks(cardRepo.getAllDecks());
             setScreen("create_cards");
-          } catch {
-            // ignore
+          } catch (e) { debugLog("App", e);
           }
           break;
         }
@@ -1160,7 +1148,7 @@ export default function App() {
         setCombatCards(cards);
         setReviewResults([]);
         setScreen("review");
-      } catch {
+      } catch (e) { debugLog("App", e);
         setScreen("hub");
       }
     },
@@ -1229,8 +1217,7 @@ export default function App() {
           inventoryId: number;
         }>,
       );
-    } catch {
-      // ignore
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -1247,8 +1234,7 @@ export default function App() {
           inventoryId: number;
         }>,
       );
-    } catch {
-      // ignore
+    } catch (e) { debugLog("App", e);
     }
   }, []);
 
@@ -1268,8 +1254,7 @@ export default function App() {
         }));
         setDeckData(infos);
         refreshCardsDue();
-      } catch {
-        // ignore
+      } catch (e) { debugLog("App", e);
       }
     },
     [refreshCardsDue],
@@ -1291,8 +1276,7 @@ export default function App() {
         }));
         setDeckData(infos);
         refreshCardsDue();
-      } catch {
-        // ignore
+      } catch (e) { debugLog("App", e);
       }
     },
     [refreshCardsDue],
@@ -1309,8 +1293,7 @@ export default function App() {
         if (prepareCombat(zone.deckId)) {
           setScreen("combat");
         }
-      } catch {
-        // ignore
+      } catch (e) { debugLog("App", e);
       }
     },
     [player, prepareCombat],
@@ -1483,8 +1466,7 @@ export default function App() {
                 if (freshUnlocks.length > 0) {
                   setNewUnlockName(freshUnlocks.map((u) => u.name).join(", "));
                 }
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
           />
@@ -1512,8 +1494,7 @@ export default function App() {
                 const updated = { ...player, desiredRetention: retention };
                 playerRepo.updatePlayer(updated);
                 setPlayer(updated);
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
             onUpdateMaxNewCards={(maxNewCards: number) => {
@@ -1524,8 +1505,7 @@ export default function App() {
                 playerRepo.updatePlayer(updated);
                 setPlayer(updated);
                 refreshCardsDue();
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
             onUpdateTimer={(timerSeconds: number) => {
@@ -1535,8 +1515,7 @@ export default function App() {
                 const updated = { ...player, timerSeconds };
                 playerRepo.updatePlayer(updated);
                 setPlayer(updated);
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
             accuracyTrend={accuracyTrend}
@@ -1547,7 +1526,7 @@ export default function App() {
                 const db = getDatabase();
                 const statsRepo = new StatsRepository(db);
                 return statsRepo.getVariantCounts();
-              } catch {
+              } catch (e) { debugLog("App", e);
                 return undefined;
               }
             })()}
@@ -1590,8 +1569,7 @@ export default function App() {
                 const equipRepo = new EquipmentRepository(db);
                 setEquippedItems(equipRepo.getEquipped());
                 setScreen("combat");
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
             onBack={() => setScreen("hub")}
@@ -1643,8 +1621,7 @@ export default function App() {
                 setPlayer(leveled);
                 checkAchievements(leveled);
                 refreshCardsDue();
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
               setScreen("hub");
             }}
@@ -1672,8 +1649,7 @@ export default function App() {
                 const leveled = applyLevelUp(updated);
                 playerRepo.updatePlayer(leveled);
                 setPlayer(leveled);
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
               setRandomEvent(null);
               setEventOutcome(null);
@@ -1699,8 +1675,7 @@ export default function App() {
                   deckId: cardData.deckId,
                 });
                 refreshCardsDue();
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
             }}
             onCreateDeck={(name) => {
@@ -1716,8 +1691,7 @@ export default function App() {
                   equipped: true,
                 });
                 setCardCreatorDecks(cardRepo.getAllDecks());
-              } catch {
-                // ignore
+              } catch (e) { debugLog("App", e);
               }
               return deckId;
             }}
