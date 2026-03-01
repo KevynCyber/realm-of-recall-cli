@@ -12,6 +12,7 @@ import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { generateHint, getMaxHintLevel, isFullReveal, generatePartialCue } from "../../core/cards/HintGenerator.js";
 import { getLearningProgress, isOverlearning, shouldRequeueCard, OVERLEARNING_MESSAGE } from "../../core/review/LearningGate.js";
 import { isPretestEligible, getPretestRevealMessage } from "../../core/review/Pretesting.js";
+import { shouldPromptExplanation, generateExplanationPrompt } from "../../core/review/SelfExplanation.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import { getDatabase } from "../../data/database.js";
@@ -386,8 +387,15 @@ export function ReviewScreen({
         ) {
           // Check for elaboration prompt: tier >= 1 and 30% chance
           const tier = card ? (cardTiers.get(card.id) ?? 0) : 0;
+          const cardState = card ? (cardStates.get(card.id) ?? "new") : "new";
+          const consecutiveCorrect = card ? (sessionCorrectCounts.get(card.id) ?? 0) : 0;
           if (tier >= 1 && _rollElaboration()) {
             const prompt = pickElaborationPrompt(effectiveCard?.back ?? "");
+            setElaborationPrompt(prompt);
+            setElaborationInput("");
+            setPhase("elaboration");
+          } else if (card && effectiveCard && shouldPromptExplanation(cardState, consecutiveCorrect)) {
+            const prompt = generateExplanationPrompt(effectiveCard.front, effectiveCard.back);
             setElaborationPrompt(prompt);
             setElaborationInput("");
             setPhase("elaboration");
