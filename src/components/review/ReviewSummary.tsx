@@ -1,12 +1,14 @@
 import React from "react";
 import { Box, Text } from "ink";
-import { AnswerQuality } from "../../types/index.js";
+import { AnswerQuality, ConfidenceLevel } from "../../types/index.js";
 import { LEVEL_UP_ART } from "../../core/ui/TerminalEffects.js";
+import { calculateSessionCalibration } from "../../core/analytics/CalibrationFeedback.js";
 
 interface ReviewResult {
   cardId: string;
   quality: AnswerQuality;
   responseTime: number;
+  confidence?: ConfidenceLevel;
 }
 
 export interface RetentionBonusCard {
@@ -116,6 +118,28 @@ export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLev
           })}
         </Box>
       )}
+      {/* Metacognitive Calibration Feedback */}
+      {(() => {
+        const withConfidence = results.filter((r): r is typeof r & { confidence: ConfidenceLevel } => !!r.confidence);
+        if (withConfidence.length < 3) return null;
+        const cal = calculateSessionCalibration(withConfidence);
+        return (
+          <Box flexDirection="column" marginTop={1}>
+            <Text bold>Calibration:</Text>
+            {cal.buckets.map((b) => (
+              <Text key={b.confidence} dimColor>
+                {`  ${b.confidence}: ${(b.accuracy * 100).toFixed(0)}% correct (${b.correctCards}/${b.totalCards})`}
+              </Text>
+            ))}
+            {cal.overconfidenceMessage && (
+              <Text color="yellow">{cal.overconfidenceMessage}</Text>
+            )}
+            {cal.underconfidenceMessage && (
+              <Text color="cyan">{cal.underconfidenceMessage}</Text>
+            )}
+          </Box>
+        );
+      })()}
       {leveledUp && newLevel !== undefined && (
         <Box flexDirection="column" marginTop={1}>
           {LEVEL_UP_ART.map((line, i) => (
