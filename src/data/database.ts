@@ -14,7 +14,7 @@ export function getDatabase(dbPath?: string): Database.Database {
   const resolvedPath = dbPath ?? DB_PATH;
   const dir = path.dirname(resolvedPath);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
   db = new Database(resolvedPath);
