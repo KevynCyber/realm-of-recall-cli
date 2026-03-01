@@ -716,4 +716,46 @@ export class StatsRepository {
       .get() as any;
     return row?.ts ?? null;
   }
+
+  /**
+   * Award a variant to a card. Only sets the variant if it is currently NULL.
+   */
+  awardVariant(cardId: string, variant: string): void {
+    this.ensureStatsExist(cardId);
+    this.db
+      .prepare(
+        `UPDATE recall_stats SET variant = ? WHERE card_id = ? AND variant IS NULL`,
+      )
+      .run(variant, cardId);
+  }
+
+  /**
+   * Get the current variant for a card (null if none).
+   */
+  getCardVariant(cardId: string): string | null {
+    const row = this.db
+      .prepare(`SELECT variant FROM recall_stats WHERE card_id = ?`)
+      .get(cardId) as any | undefined;
+    return row?.variant ?? null;
+  }
+
+  /**
+   * Get counts of each variant type across all cards.
+   */
+  getVariantCounts(): { foil: number; golden: number; prismatic: number } {
+    const rows = this.db
+      .prepare(
+        `SELECT variant, COUNT(*) as count FROM recall_stats WHERE variant IS NOT NULL GROUP BY variant`,
+      )
+      .all() as any[];
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      counts[row.variant] = row.count;
+    }
+    return {
+      foil: counts["foil"] ?? 0,
+      golden: counts["golden"] ?? 0,
+      prismatic: counts["prismatic"] ?? 0,
+    };
+  }
 }
