@@ -105,6 +105,8 @@ export function ReviewScreen({
   // Hint system
   const [hintLevel, setHintLevel] = useState(0);
   const [showHint, setShowHint] = useState(false);
+  // Suspend/bury confirmation
+  const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
 
   const card = cardQueue[currentIndex];
   const totalTime = 30; // seconds
@@ -319,6 +321,56 @@ export function ReviewScreen({
     { isActive: phase === "question" && !isTeach },
   );
 
+  // Suspend/Bury key handler — press S to suspend, B to bury during question phase
+  const skipCurrentCard = useCallback(() => {
+    if (currentIndex + 1 >= cardQueue.length) {
+      setTimeout(() => onComplete(results), 0);
+    } else {
+      setCurrentIndex((i) => i + 1);
+      setPhase("question");
+      setInput("");
+      setLastQuality(null);
+      setCardStart(Date.now());
+      setPendingResponseText(undefined);
+      setHintLevel(0);
+      setShowHint(false);
+    }
+  }, [cardQueue.length, currentIndex, onComplete, results]);
+
+  useInput(
+    (_input) => {
+      if (!card) return;
+      if (_input === "s" || _input === "S") {
+        try {
+          const db = getDatabase();
+          const statsRepo = new StatsRepository(db);
+          statsRepo.suspendCard(card.id);
+          setCardActionMsg("Card suspended");
+          setTimeout(() => {
+            setCardActionMsg(null);
+            skipCurrentCard();
+          }, 800);
+        } catch {
+          // ignore
+        }
+      } else if (_input === "b" || _input === "B") {
+        try {
+          const db = getDatabase();
+          const statsRepo = new StatsRepository(db);
+          statsRepo.buryCard(card.id);
+          setCardActionMsg("Card buried until tomorrow");
+          setTimeout(() => {
+            setCardActionMsg(null);
+            skipCurrentCard();
+          }, 800);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    { isActive: phase === "question" && !cardActionMsg },
+  );
+
   // --------------------------------------------------------------- guard
   if (!card || !effectiveCard) {
     onComplete(results);
@@ -372,14 +424,17 @@ export function ReviewScreen({
       )}
 
       {/* Teach mode: question phase — prompt for explanation */}
-      {isTeach && phase === "question" && (
-        <Box marginTop={1}>
-          <Text bold>Explain this concept: </Text>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            onSubmit={handleTeachSubmit}
-          />
+      {isTeach && phase === "question" && !cardActionMsg && (
+        <Box marginTop={1} flexDirection="column">
+          <Box>
+            <Text bold>Explain this concept: </Text>
+            <TextInput
+              value={input}
+              onChange={setInput}
+              onSubmit={handleTeachSubmit}
+            />
+          </Box>
+          <Text dimColor italic>Press [S] suspend | [B] bury</Text>
         </Box>
       )}
 
@@ -395,15 +450,22 @@ export function ReviewScreen({
         </Box>
       )}
 
+      {/* Suspend/Bury confirmation */}
+      {cardActionMsg && (
+        <Box marginTop={1}>
+          <Text bold color="yellow">{cardActionMsg}</Text>
+        </Box>
+      )}
+
       {/* Standard/Reversed: question phase — text input */}
-      {!isTeach && phase === "question" && (
+      {!isTeach && phase === "question" && !cardActionMsg && (
         <Box marginTop={1} flexDirection="column">
           <Box>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
           </Box>
           {!showHint && (
-            <Text dimColor italic>Press [H] for a hint</Text>
+            <Text dimColor italic>Press [H] for a hint | [S] suspend | [B] bury</Text>
           )}
         </Box>
       )}

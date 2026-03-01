@@ -250,6 +250,7 @@ export class StatsRepository {
 
   getDueCardIds(deckId?: string | string[]): string[] {
     const now = new Date().toISOString();
+    const suspendBuryFilter = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
     let query: string;
     let params: any[];
 
@@ -261,26 +262,29 @@ export class StatsRepository {
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id IN (${placeholders})
           AND (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [...deckId, now];
+      params = [...deckId, now, now];
     } else if (deckId) {
       query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id = ?
           AND (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [deckId, now];
+      params = [deckId, now, now];
     } else {
       query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
-        WHERE rs.next_review_at IS NULL OR rs.next_review_at <= ?
+        WHERE (rs.next_review_at IS NULL OR rs.next_review_at <= ?)
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      params = [now];
+      params = [now, now];
     }
 
     const rows = this.db.prepare(query).all(...params) as any[];
@@ -290,6 +294,9 @@ export class StatsRepository {
   getDueCards(deckId?: string | string[], limit?: number): string[] {
     const now = new Date().toISOString();
     const effectiveLimit = limit ?? 9999;
+    const suspendBuryJoin = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
+    // For the new-card branch (LEFT JOIN), cards without stats are not suspended/buried
+    const suspendBuryNew = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
 
     if (Array.isArray(deckId)) {
       if (deckId.length === 0) return [];
@@ -301,16 +308,18 @@ export class StatsRepository {
           WHERE c.deck_id IN (${placeholders})
             AND rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE c.deck_id IN (${placeholders})
             AND (rs.card_state IS NULL OR rs.card_state = 'new')
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(...deckId, now, ...deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(...deckId, now, now, ...deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else if (deckId) {
       const query = `
@@ -320,16 +329,18 @@ export class StatsRepository {
           WHERE c.deck_id = ?
             AND rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE c.deck_id = ?
             AND (rs.card_state IS NULL OR rs.card_state = 'new')
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(deckId, now, deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(deckId, now, now, deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else {
       const query = `
@@ -338,15 +349,17 @@ export class StatsRepository {
           JOIN recall_stats rs ON rs.card_id = c.id
           WHERE rs.card_state != 'new'
             AND rs.next_review_at <= ?
+            ${suspendBuryJoin}
           UNION ALL
           SELECT c.id, NULL as next_review_at FROM cards c
           LEFT JOIN recall_stats rs ON rs.card_id = c.id
           WHERE rs.card_state IS NULL OR rs.card_state = 'new'
+            ${suspendBuryNew}
         )
         ORDER BY next_review_at ASC
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(now, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(now, now, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     }
   }
@@ -527,6 +540,7 @@ export class StatsRepository {
    */
   private getReviewDueCards(deckId?: string | string[]): string[] {
     const now = new Date().toISOString();
+    const suspendBuryFilter = `AND rs.suspended = 0 AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
 
     if (Array.isArray(deckId)) {
       if (deckId.length === 0) return [];
@@ -537,9 +551,10 @@ export class StatsRepository {
         WHERE c.deck_id IN (${placeholders})
           AND rs.card_state != 'new'
           AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      const rows = this.db.prepare(query).all(...deckId, now) as any[];
+      const rows = this.db.prepare(query).all(...deckId, now, now) as any[];
       return rows.map((r) => r.id);
     } else if (deckId) {
       const query = `
@@ -548,9 +563,10 @@ export class StatsRepository {
         WHERE c.deck_id = ?
           AND rs.card_state != 'new'
           AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      const rows = this.db.prepare(query).all(deckId, now) as any[];
+      const rows = this.db.prepare(query).all(deckId, now, now) as any[];
       return rows.map((r) => r.id);
     } else {
       const query = `
@@ -558,9 +574,10 @@ export class StatsRepository {
         JOIN recall_stats rs ON rs.card_id = c.id
         WHERE rs.card_state != 'new'
           AND rs.next_review_at <= ?
+          ${suspendBuryFilter}
         ORDER BY rs.next_review_at ASC
       `;
-      const rows = this.db.prepare(query).all(now) as any[];
+      const rows = this.db.prepare(query).all(now, now) as any[];
       return rows.map((r) => r.id);
     }
   }
@@ -571,6 +588,8 @@ export class StatsRepository {
   private getNewCardIds(deckId?: string | string[], limit?: number): string[] {
     const effectiveLimit = limit ?? 9999;
     if (effectiveLimit <= 0) return [];
+    const now = new Date().toISOString();
+    const suspendBuryFilter = `AND (rs.suspended IS NULL OR rs.suspended = 0) AND (rs.buried_until IS NULL OR rs.buried_until <= ?)`;
 
     if (Array.isArray(deckId)) {
       if (deckId.length === 0) return [];
@@ -580,9 +599,10 @@ export class StatsRepository {
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id IN (${placeholders})
           AND (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(...deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(...deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else if (deckId) {
       const query = `
@@ -590,20 +610,65 @@ export class StatsRepository {
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
         WHERE c.deck_id = ?
           AND (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(deckId, effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(deckId, now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     } else {
       const query = `
         SELECT c.id FROM cards c
         LEFT JOIN recall_stats rs ON rs.card_id = c.id
-        WHERE rs.card_state IS NULL OR rs.card_state = 'new'
+        WHERE (rs.card_state IS NULL OR rs.card_state = 'new')
+          ${suspendBuryFilter}
         LIMIT ?
       `;
-      const rows = this.db.prepare(query).all(effectiveLimit) as any[];
+      const rows = this.db.prepare(query).all(now, effectiveLimit) as any[];
       return rows.map((r) => r.id);
     }
+  }
+
+  suspendCard(cardId: string): void {
+    this.ensureStatsExist(cardId);
+    this.db
+      .prepare(`UPDATE recall_stats SET suspended = 1 WHERE card_id = ?`)
+      .run(cardId);
+  }
+
+  unsuspendCard(cardId: string): void {
+    this.db
+      .prepare(`UPDATE recall_stats SET suspended = 0 WHERE card_id = ?`)
+      .run(cardId);
+  }
+
+  buryCard(cardId: string): void {
+    this.ensureStatsExist(cardId);
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    this.db
+      .prepare(`UPDATE recall_stats SET buried_until = ? WHERE card_id = ?`)
+      .run(tomorrow.toISOString(), cardId);
+  }
+
+  getSuspendedCount(deckId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM recall_stats rs
+         JOIN cards c ON c.id = rs.card_id
+         WHERE c.deck_id = ? AND rs.suspended = 1`,
+      )
+      .get(deckId) as any;
+    return row.count;
+  }
+
+  unsuspendAll(deckId: string): void {
+    this.db
+      .prepare(
+        `UPDATE recall_stats SET suspended = 0
+         WHERE card_id IN (SELECT id FROM cards WHERE deck_id = ?)`,
+      )
+      .run(deckId);
   }
 
   getTotalReviewed(): number {

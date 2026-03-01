@@ -239,4 +239,11 @@ const migrations = [
     name: "007_max_new_cards_per_day",
     sql: `ALTER TABLE player ADD COLUMN max_new_cards_per_day INTEGER NOT NULL DEFAULT 20;`,
   },
+  {
+    name: "008_suspension_bury",
+    sql: `
+      ALTER TABLE recall_stats ADD COLUMN suspended INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE recall_stats ADD COLUMN buried_until TEXT;
+    `,
+  },
 ];

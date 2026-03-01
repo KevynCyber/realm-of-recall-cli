@@ -113,6 +113,8 @@ export function CombatScreen({
   const [activeEffects, setActiveEffects] = useState<AbilityEffect[]>([]);
   const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
   const unlockedAbilities = getUnlockedAbilities(player.class, player.level);
+  // Suspend/bury confirmation
+  const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
 
   // Look up evolution tiers for all cards
   const cardTiers = useMemo(() => {
@@ -307,7 +309,52 @@ export function CombatScreen({
         setPhase("ability_menu");
       }
     },
-    { isActive: phase === "card" },
+    { isActive: phase === "card" && !cardActionMsg },
+  );
+
+  // -- Handle [S] suspend / [B] bury during card phase --
+  useInput(
+    (input) => {
+      if (!currentCard) return;
+      if (input === "s" || input === "S") {
+        try {
+          const db = getDatabase();
+          const statsRepo = new StatsRepository(db);
+          statsRepo.suspendCard(currentCard.id);
+          setCardActionMsg("Card suspended");
+          setTimeout(() => {
+            setCardActionMsg(null);
+            // Advance to next card in combat
+            setCombat((prev) => ({
+              ...prev,
+              currentCardIndex: prev.currentCardIndex + 1,
+            }));
+            setPhase("resolve");
+          }, 800);
+        } catch {
+          // ignore
+        }
+      } else if (input === "b" || input === "B") {
+        try {
+          const db = getDatabase();
+          const statsRepo = new StatsRepository(db);
+          statsRepo.buryCard(currentCard.id);
+          setCardActionMsg("Card buried until tomorrow");
+          setTimeout(() => {
+            setCardActionMsg(null);
+            // Advance to next card in combat
+            setCombat((prev) => ({
+              ...prev,
+              currentCardIndex: prev.currentCardIndex + 1,
+            }));
+            setPhase("resolve");
+          }, 800);
+        } catch {
+          // ignore
+        }
+      }
+    },
+    { isActive: phase === "card" && !cardActionMsg },
   );
 
   // -- Handle ability selection in ability menu --
@@ -577,17 +624,24 @@ export function CombatScreen({
         </Text>
       </Box>
 
+      {/* Suspend/Bury confirmation */}
+      {cardActionMsg && phase === "card" && (
+        <Box marginTop={1}>
+          <Text bold color="yellow">{cardActionMsg}</Text>
+        </Box>
+      )}
+
       {/* Middle: Card content */}
-      {phase === "card" && currentCard && (
+      {phase === "card" && currentCard && !cardActionMsg && (
         <>
           <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} isRetry={(requeueCounts.get(currentCard.id) ?? 0) > 0 && combat.currentCardIndex >= cards.length} />
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
           </Box>
-          {unlockedAbilities.length > 0 && (
-            <Text dimColor italic>Press [A] for abilities</Text>
-          )}
+          <Text dimColor italic>
+            {unlockedAbilities.length > 0 ? "Press [A] abilities | " : ""}[S] suspend | [B] bury
+          </Text>
         </>
       )}
 

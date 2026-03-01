@@ -168,7 +168,7 @@
         "Tests pass"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "No mechanism to suspend, bury, or manually skip cards. Essential for leech management."
     },
     {
