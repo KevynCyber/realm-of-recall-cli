@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   selectMode,
   getModeDamageMultiplier,
@@ -7,9 +7,14 @@ import {
   createCombatState,
   resolveTurn,
 } from "../../../src/core/combat/CombatEngine.js";
-import { AnswerQuality, RetrievalMode } from "../../../src/types/index.js";
+import { AnswerQuality, RetrievalMode, CardType } from "../../../src/types/index.js";
+import type { Card, ScheduleData } from "../../../src/types/index.js";
 import { EnemyTier } from "../../../src/types/combat.js";
 import type { Enemy } from "../../../src/types/combat.js";
+import { getInMemoryDatabase } from "../../../src/data/database.js";
+import { CardRepository } from "../../../src/data/repositories/CardRepository.js";
+import { StatsRepository } from "../../../src/data/repositories/StatsRepository.js";
+import { getMajorityCardState } from "../../../src/components/app/App.js";
 
 function makeEnemy(overrides: Partial<Enemy> = {}): Enemy {
   return {
@@ -179,5 +184,126 @@ describe("mode selection wiring into combat flow", () => {
 
     const expectedDamage = Math.floor(10 * 1.0 * 1.0 * getModeDamageMultiplier(mode));
     expect(event.damage).toBe(expectedDamage);
+  });
+});
+
+describe("getMajorityCardState", () => {
+  let db: ReturnType<typeof getInMemoryDatabase>;
+  let cardRepo: CardRepository;
+  let statsRepo: StatsRepository;
+
+  const testDeck = {
+    id: "deck1",
+    name: "Test Deck",
+    description: "For testing",
+    createdAt: new Date().toISOString(),
+    equipped: true,
+  };
+
+  function makeCard(id: string): Card {
+    return {
+      id,
+      front: `Q ${id}`,
+      back: `A ${id}`,
+      acceptableAnswers: [`A ${id}`],
+      type: CardType.Basic,
+      deckId: "deck1",
+    };
+  }
+
+  beforeEach(() => {
+    db = getInMemoryDatabase();
+    cardRepo = new CardRepository(db);
+    statsRepo = new StatsRepository(db);
+    cardRepo.createDeck(testDeck);
+  });
+
+  it('returns "review" for empty cards array', () => {
+    expect(getMajorityCardState([], statsRepo)).toBe("review");
+  });
+
+  it('returns "new" when all cards have no schedule (are new)', () => {
+    const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
+    for (const c of cards) cardRepo.createCard(c);
+    // No schedules recorded, so all cards are new
+    expect(getMajorityCardState(cards, statsRepo)).toBe("new");
+  });
+
+  it('returns "review" when all cards have review schedule', () => {
+    const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
+    for (const c of cards) {
+      cardRepo.createCard(c);
+      const schedule: ScheduleData = {
+        cardId: c.id,
+        difficulty: 5.0,
+        stability: 1.0,
+        reps: 3,
+        lapses: 0,
+        state: "review",
+        due: new Date().toISOString(),
+        lastReview: new Date().toISOString(),
+      };
+      statsRepo.recordAttempt(
+        c.id,
+        { cardId: c.id, timestamp: Date.now(), responseTime: 2, quality: AnswerQuality.Correct, wasTimed: false },
+        schedule,
+        0,
+      );
+    }
+    expect(getMajorityCardState(cards, statsRepo)).toBe("review");
+  });
+
+  it('returns "new" when >50% of cards are new', () => {
+    const cards = [makeCard("c1"), makeCard("c2"), makeCard("c3")];
+    for (const c of cards) cardRepo.createCard(c);
+    // Only c1 has a review schedule; c2, c3 are new (66% new)
+    const schedule: ScheduleData = {
+      cardId: "c1",
+      difficulty: 5.0,
+      stability: 1.0,
+      reps: 3,
+      lapses: 0,
+      state: "review",
+      due: new Date().toISOString(),
+      lastReview: new Date().toISOString(),
+    };
+    statsRepo.recordAttempt(
+      "c1",
+      { cardId: "c1", timestamp: Date.now(), responseTime: 2, quality: AnswerQuality.Correct, wasTimed: false },
+      schedule,
+      0,
+    );
+    expect(getMajorityCardState(cards, statsRepo)).toBe("new");
+  });
+
+  it('returns "review" when <=50% of cards are new', () => {
+    const cards = [makeCard("c1"), makeCard("c2")];
+    for (const c of cards) cardRepo.createCard(c);
+    // c1 has review schedule, c2 is new (50% new, not >50%)
+    const schedule: ScheduleData = {
+      cardId: "c1",
+      difficulty: 5.0,
+      stability: 1.0,
+      reps: 3,
+      lapses: 0,
+      state: "review",
+      due: new Date().toISOString(),
+      lastReview: new Date().toISOString(),
+    };
+    statsRepo.recordAttempt(
+      "c1",
+      { cardId: "c1", timestamp: Date.now(), responseTime: 2, quality: AnswerQuality.Correct, wasTimed: false },
+      schedule,
+      0,
+    );
+    expect(getMajorityCardState(cards, statsRepo)).toBe("review");
+  });
+
+  it('new cards get Standard mode via selectMode', () => {
+    // When getMajorityCardState returns "new", selectMode should always return Standard
+    for (let i = 0; i < 100; i++) {
+      const mode = selectMode("new", [], []);
+      expect(mode).toBe(RetrievalMode.Standard);
+    }
   });
 });
