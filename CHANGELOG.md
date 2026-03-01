@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.5.1] - 2026-02-28
+
+### Added
+
+- **Cross-Deck Interleaving in Combat (US-011)**: Hub Adventure now interleaves cards from all equipped decks using max-2-consecutive constraint for optimal retention.
+- **Ascension UI in World Map (US-013)**: View current ascension level and active modifiers on the map. Press [A] to begin next ascension when all zones are cleared.
+- **Class Abilities in Combat (US-014)**: Press [A] during combat to open ability menu. SP display, cooldown tracking, and 9 class abilities (Reveal, Insight, Wisdom Surge, Endure, Battle Cry, Fortify, Steal, Shadow Strike, Lucky Find).
+- **Post-Combat Random Events (US-016)**: 30% chance of a random event after combat victories. 8 event types with choices and outcomes that affect gold, HP, XP, and more.
+- **Enhanced Card Health Visualization (US-018)**: FlashcardFace now shows evolution tier progress bar, tier names (New/Learned/Proven/Mastered), and narrative guidance for struggling and leech cards.
+- **Terminal Effects (US-019)**: BEL audio on level up and achievement unlock. ASCII art LEVEL UP banner. Text reveal animation support. Disable with `REALM_NO_ANIMATION=1`.
+- **RandomEventScreen**: Standalone screen for post-combat random events with choice UI and outcome display.
+- **TerminalEffects module**: `playBel()`, `LEVEL_UP_ART`, `revealText()`, `animationsEnabled()`.
+- **Ascension modifiers applied to combat enemies**: Enemy HP and attack scale with ascension level.
+- 20 new tests (669 total across 36 test files)
+
 ## [0.5.0] - 2026-02-28
 
 ### Added

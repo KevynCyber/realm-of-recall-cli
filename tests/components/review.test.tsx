@@ -135,8 +135,9 @@ describe("ReviewSummary", () => {
       <ReviewSummary results={[]} leveledUp={true} newLevel={5} />,
     );
     const frame = lastFrame();
-    expect(frame).toContain("LEVEL UP!");
     expect(frame).toContain("level 5");
+    // ASCII art LEVEL UP banner is rendered with ANSI formatting
+    expect(frame).toContain("___|");
   });
 
   it("does not render XP/gold when not provided", () => {
