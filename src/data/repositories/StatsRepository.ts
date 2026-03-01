@@ -428,6 +428,17 @@ export class StatsRepository {
     };
   }
 
+  getMasteredCount(deckId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) as count FROM recall_stats rs
+         JOIN cards c ON c.id = rs.card_id
+         WHERE c.deck_id = ? AND rs.evolution_tier >= 3`,
+      )
+      .get(deckId) as any;
+    return row.count;
+  }
+
   getAttempts(cardId: string): RecallAttempt[] {
     const rows = this.db
       .prepare(

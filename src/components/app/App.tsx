@@ -13,6 +13,8 @@ import { StatsScreen } from "../screens/StatsScreen.js";
 import { DeckScreen } from "../screens/DeckScreen.js";
 import { CardCreatorScreen } from "../screens/CardCreatorScreen.js";
 import { AchievementScreen } from "../screens/AchievementScreen.js";
+import { BestiaryScreen } from "../screens/BestiaryScreen.js";
+import type { CollectionDeckStats } from "../screens/BestiaryScreen.js";
 import { DailyChallengeScreen } from "../screens/DailyChallengeScreen.js";
 import { DungeonRunScreen } from "../screens/DungeonRunScreen.js";
 import type { FloorCombatResult } from "../screens/DungeonRunScreen.js";
@@ -123,7 +125,8 @@ export type Screen =
   | "daily_challenge"
   | "dungeon"
   | "random_event"
-  | "create_cards";
+  | "create_cards"
+  | "bestiary";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -194,6 +197,10 @@ export default function App() {
 
   // Achievement state
   const [unlockedAchievementKeys, setUnlockedAchievementKeys] = useState<Set<string>>(new Set());
+
+  // Bestiary state
+  const [bestiaryEncounters, setBestiaryEncounters] = useState<import("../../data/repositories/EnemyRepository.js").EnemyEncounter[]>([]);
+  const [bestiaryCollectionStats, setBestiaryCollectionStats] = useState<CollectionDeckStats[]>([]);
 
   // Daily challenge state
   const [dailyChallengeConfig, setDailyChallengeConfig] = useState<DailyChallengeConfig | null>(null);
@@ -632,6 +639,26 @@ export default function App() {
             const achievementRepo = new AchievementRepository(db);
             setUnlockedAchievementKeys(achievementRepo.getUnlockedKeys());
             setScreen("achievements");
+          } catch {
+            // ignore
+          }
+          break;
+        }
+        case "bestiary": {
+          try {
+            const db = getDatabase();
+            const enemyRepo = new EnemyRepository(db);
+            const cardRepo = new CardRepository(db);
+            const statsRepo = new StatsRepository(db);
+            setBestiaryEncounters(enemyRepo.getEncounters());
+            const decks = cardRepo.getAllDecks();
+            const cs: CollectionDeckStats[] = decks.map((deck) => ({
+              name: deck.name,
+              total: statsRepo.getDeckMasteryStats(deck.id).total,
+              mastered: statsRepo.getMasteredCount(deck.id),
+            }));
+            setBestiaryCollectionStats(cs);
+            setScreen("bestiary");
           } catch {
             // ignore
           }
@@ -1404,6 +1431,14 @@ export default function App() {
         return (
           <AchievementScreen
             unlockedKeys={unlockedAchievementKeys}
+            onBack={() => setScreen("hub")}
+          />
+        );
+      case "bestiary":
+        return (
+          <BestiaryScreen
+            encounters={bestiaryEncounters}
+            collectionStats={bestiaryCollectionStats}
             onBack={() => setScreen("hub")}
           />
         );
