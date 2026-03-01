@@ -44,6 +44,32 @@ export interface DailyChallengeConfig {
   bonusXpMultiplier: number;
 }
 
+/** Gold bonus multiplier for daily challenge rewards */
+const DAILY_GOLD_MULTIPLIER = 2.0;
+/** XP bonus multiplier for daily challenge rewards */
+const DAILY_XP_MULTIPLIER = 1.5;
+/** Max cards in a daily challenge */
+const DAILY_CARD_COUNT = 10;
+/** Enemy stat scaling constants */
+const BASE_HP = 30;
+const HP_PER_LEVEL = 8;
+const BASE_ATTACK = 5;
+const ATTACK_PER_LEVEL = 2;
+const BASE_XP = 20;
+const XP_PER_LEVEL = 5;
+const BASE_GOLD = 15;
+const GOLD_PER_LEVEL = 3;
+/** Accuracy weight in scoring (out of 1000 total) */
+const ACCURACY_MAX_SCORE = 500;
+/** Speed weight in scoring */
+const SPEED_MAX_SCORE = 300;
+/** Speed time threshold in ms (responses slower than this get 0 speed score) */
+const SPEED_TIME_THRESHOLD_MS = 30000;
+/** Damage weight in scoring */
+const DAMAGE_MAX_SCORE = 200;
+/** Damage points per unit of damage dealt */
+const DAMAGE_SCORE_MULTIPLIER = 2;
+
 const CHALLENGE_ENEMY_NAMES = [
   "Daily Guardian",
   "Challenge Sentinel",
@@ -70,10 +96,10 @@ export function generateDailyChallenge(
   const nameIndex = Math.floor(rng() * CHALLENGE_ENEMY_NAMES.length);
   const enemyName = CHALLENGE_ENEMY_NAMES[nameIndex];
 
-  const baseHp = 30 + playerLevel * 8;
-  const baseAttack = 5 + playerLevel * 2;
-  const baseXp = 20 + playerLevel * 5;
-  const baseGold = 15 + playerLevel * 3;
+  const baseHp = BASE_HP + playerLevel * HP_PER_LEVEL;
+  const baseAttack = BASE_ATTACK + playerLevel * ATTACK_PER_LEVEL;
+  const baseXp = BASE_XP + playerLevel * XP_PER_LEVEL;
+  const baseGold = BASE_GOLD + playerLevel * GOLD_PER_LEVEL;
 
   const enemy: Enemy = {
     name: enemyName,
@@ -85,7 +111,7 @@ export function generateDailyChallenge(
     goldReward: baseGold,
   };
 
-  const cardCount = Math.min(10, allCards.length);
+  const cardCount = Math.min(DAILY_CARD_COUNT, allCards.length);
   const shuffled = [...allCards];
 
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -98,8 +124,8 @@ export function generateDailyChallenge(
   return {
     enemy,
     cardIds,
-    bonusGoldMultiplier: 2.0,
-    bonusXpMultiplier: 1.5,
+    bonusGoldMultiplier: DAILY_GOLD_MULTIPLIER,
+    bonusXpMultiplier: DAILY_XP_MULTIPLIER,
   };
 }
 
@@ -120,12 +146,12 @@ export function scoreDailyChallenge(
   totalDamageDealt: number,
 ): DailyChallengeScore {
   const accuracyScore =
-    totalCards > 0 ? Math.round((correctCount / totalCards) * 500) : 0;
+    totalCards > 0 ? Math.round((correctCount / totalCards) * ACCURACY_MAX_SCORE) : 0;
 
-  const speedFactor = Math.max(0, 1 - avgResponseTimeMs / 30000);
-  const speedScore = Math.round(speedFactor * 300);
+  const speedFactor = Math.max(0, 1 - avgResponseTimeMs / SPEED_TIME_THRESHOLD_MS);
+  const speedScore = Math.round(speedFactor * SPEED_MAX_SCORE);
 
-  const damageScore = Math.min(200, Math.round(totalDamageDealt * 2));
+  const damageScore = Math.min(DAMAGE_MAX_SCORE, Math.round(totalDamageDealt * DAMAGE_SCORE_MULTIPLIER));
 
   return {
     total: accuracyScore + speedScore + damageScore,
