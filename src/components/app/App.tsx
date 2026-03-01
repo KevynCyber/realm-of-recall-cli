@@ -259,6 +259,7 @@ export default function App() {
   const [breakDismissed, setBreakDismissed] = useState(false);
   const [showBreakScreen, setShowBreakScreen] = useState(false);
   const sessionCardsReviewed = useRef(0);
+  const idleBannerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Backlog / Welcome Back state
   const [backlogDaysSince, setBacklogDaysSince] = useState(0);
@@ -370,7 +371,7 @@ export default function App() {
           if (idleResult.gold > 0) parts.push(`Earned ${idleResult.gold} gold`);
           if (idleResult.hpRecovered > 0) parts.push(`recovered ${idleResult.hpRecovered} HP`);
           setIdleBanner(`Welcome back! ${parts.join(", ")} while training.`);
-          setTimeout(() => setIdleBanner(null), 3000);
+          idleBannerTimerRef.current = setTimeout(() => setIdleBanner(null), 3000);
         } else {
           // Update last_login_at even if no rewards
           p.lastLoginAt = new Date().toISOString();
@@ -406,6 +407,13 @@ export default function App() {
     } catch {
       // ignore — show title screen
     }
+  }, []);
+
+  // Cleanup idle banner timer on unmount
+  useEffect(() => {
+    return () => {
+      if (idleBannerTimerRef.current) clearTimeout(idleBannerTimerRef.current);
+    };
   }, []);
 
   // Poll session duration every 30s to update break level
