@@ -47,6 +47,7 @@ import {
   createInitialSchedule,
 } from "../../core/spaced-repetition/Scheduler.js";
 import { applyLevelUp } from "../../core/progression/LevelSystem.js";
+import { getRetentionMultiplier } from "../../core/progression/XPCalculator.js";
 import {
   updateStreak,
   getStreakBonus,
@@ -179,6 +180,7 @@ export default function App() {
   const [cardCreatorDecks, setCardCreatorDecks] = useState<Deck[]>([]);
   const [reviewResults, setReviewResults] = useState<ReviewResult[]>([]);
   const [reviewXp, setReviewXp] = useState(0);
+  const [retentionBonusCards, setRetentionBonusCards] = useState<{ cardId: string; multiplier: number }[]>([]);
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
 
@@ -664,13 +666,34 @@ export default function App() {
         const today = getTodayUTC();
         let updated = updateStreak(player, today);
 
+        // Compute retention multiplier bonus for combat cards
+        let combatRetentionXpBonus = 0;
+        let combatRetentionGoldBonus = 0;
+        if (result.victory) {
+          const reviewedCards = combatCards.slice(0, result.cardsReviewed);
+          for (const card of reviewedCards) {
+            const existing = statsRepo.getSchedule(card.id);
+            if (existing?.lastReview) {
+              const daysSince = (Date.now() - new Date(existing.lastReview).getTime()) / (1000 * 60 * 60 * 24);
+              const mult = getRetentionMultiplier(daysSince);
+              if (mult > 1) {
+                // Apply retention multiplier as bonus portion on top of base per-card share
+                const perCardXp = result.cardsReviewed > 0 ? result.xpEarned / result.cardsReviewed : 0;
+                const perCardGold = result.cardsReviewed > 0 ? result.goldEarned / result.cardsReviewed : 0;
+                combatRetentionXpBonus += Math.floor(perCardXp * (mult - 1));
+                combatRetentionGoldBonus += Math.floor(perCardGold * (mult - 1));
+              }
+            }
+          }
+        }
+
         // Update combat record
         updated = {
           ...updated,
           combatWins: updated.combatWins + (result.victory ? 1 : 0),
           combatLosses: updated.combatLosses + (result.victory ? 0 : 1),
-          xp: updated.xp + result.xpEarned,
-          gold: updated.gold + result.goldEarned,
+          xp: updated.xp + result.xpEarned + combatRetentionXpBonus,
+          gold: updated.gold + result.goldEarned + combatRetentionGoldBonus,
           totalReviews: updated.totalReviews + result.cardsReviewed,
           totalCorrect:
             updated.totalCorrect + result.perfectCount + result.correctCount,
@@ -805,11 +828,29 @@ export default function App() {
           totalCorrect: updated.totalCorrect + correctCount,
         };
 
-        // Update each card's FSRS schedule
+        // Update each card's FSRS schedule and compute retention bonuses
+        const bonusCards: { cardId: string; multiplier: number }[] = [];
+        let retentionXpBonus = 0;
         for (const result of results) {
           const existing = statsRepo.getSchedule(result.cardId);
           const schedule: ScheduleData =
             existing ?? createInitialSchedule(result.cardId);
+
+          // Compute retention multiplier from days since last review (before updating)
+          const isCorrect =
+            result.quality === AnswerQuality.Perfect ||
+            result.quality === AnswerQuality.Correct ||
+            result.quality === AnswerQuality.Partial;
+          if (isCorrect && existing?.lastReview) {
+            const daysSince = (Date.now() - new Date(existing.lastReview).getTime()) / (1000 * 60 * 60 * 24);
+            const mult = getRetentionMultiplier(daysSince);
+            if (mult > 1) {
+              bonusCards.push({ cardId: result.cardId, multiplier: mult });
+              // Each card earns 5 base XP; bonus is (mult - 1) * 5 extra XP
+              retentionXpBonus += (mult - 1) * 5;
+            }
+          }
+
           const updatedSchedule = updateSchedule(
             schedule,
             result.quality,
@@ -819,10 +860,6 @@ export default function App() {
 
           // Compute evolution tier
           const evoStats = statsRepo.getCardEvolutionStats(result.cardId);
-          const isCorrect =
-            result.quality === AnswerQuality.Perfect ||
-            result.quality === AnswerQuality.Correct ||
-            result.quality === AnswerQuality.Partial;
           const newConsecutive = isCorrect ? evoStats.consecutiveCorrect + 1 : 0;
           const tier = evaluateEvolutionTier(
             newConsecutive,
@@ -849,8 +886,8 @@ export default function App() {
           );
         }
 
-        // Award XP for reviewing (Deep Focus perk: +10%)
-        const baseReviewXp = results.length * 5;
+        // Award XP for reviewing (Deep Focus perk: +10%) plus retention bonus
+        const baseReviewXp = results.length * 5 + retentionXpBonus;
         const xpGained = hasPerk(updated.wisdomXp, "deep_focus")
           ? Math.floor(baseReviewXp * 1.1)
           : baseReviewXp;
@@ -870,6 +907,7 @@ export default function App() {
         setPlayer(updated);
         setReviewResults(results);
         setReviewXp(xpGained);
+        setRetentionBonusCards(bonusCards);
         const didLevelUp = updated.level > prevLevel;
         setLeveledUp(didLevelUp);
         setNewLevel(updated.level);
@@ -1171,6 +1209,7 @@ export default function App() {
               xpEarned={reviewXp}
               leveledUp={leveledUp}
               newLevel={newLevel}
+              retentionBonusCards={retentionBonusCards}
             />
             <Box marginTop={1} justifyContent="center">
               <Text dimColor italic>

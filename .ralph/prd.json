@@ -335,7 +335,7 @@
         "Tests pass"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "Research: aligning rewards to the SRS schedule produces 3x better 30-day retention than gamification or SRS alone (eLearning Industry). No SRS app currently rewards long-interval recalls with bigger bonuses."
     },
     {

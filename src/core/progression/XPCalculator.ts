@@ -60,3 +60,17 @@ export function calculateCombatXP(
 export function calculateGoldReward(baseGold: number, goldBonusPct: number): number {
   return Math.floor(baseGold * (1 + goldBonusPct / 100));
 }
+
+/**
+ * Returns a retention multiplier that rewards long-interval successful recalls.
+ * Aligning XP/gold rewards with the spacing effect reinforces good SRS habits.
+ *
+ * - < 7 days since last review: 1x (no bonus)
+ * - 7-29 days: 3x
+ * - 30+ days: 5x
+ */
+export function getRetentionMultiplier(daysSinceLastReview: number): number {
+  if (daysSinceLastReview >= 30) return 5;
+  if (daysSinceLastReview >= 7) return 3;
+  return 1;
+}

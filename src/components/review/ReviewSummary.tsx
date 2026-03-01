@@ -9,15 +9,21 @@ interface ReviewResult {
   responseTime: number;
 }
 
+export interface RetentionBonusCard {
+  cardId: string;
+  multiplier: number;
+}
+
 interface Props {
   results: ReviewResult[];
   xpEarned?: number;
   goldEarned?: number;
   leveledUp?: boolean;
   newLevel?: number;
+  retentionBonusCards?: RetentionBonusCard[];
 }
 
-export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel }: Props) {
+export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel, retentionBonusCards }: Props) {
   const total = results.length;
   const perfect = results.filter(
     (r) => r.quality === AnswerQuality.Perfect,
@@ -73,6 +79,18 @@ export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLev
       )}
       {goldEarned !== undefined && (
         <Text color="yellow">Gold: +{goldEarned}</Text>
+      )}
+      {retentionBonusCards && retentionBonusCards.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="cyan">
+            Long-term Recall Bonus!
+          </Text>
+          {retentionBonusCards.map((b) => (
+            <Text key={b.cardId} color="cyan">
+              {`  Card ${b.cardId.slice(0, 8)}... (${b.multiplier}x)`}
+            </Text>
+          ))}
+        </Box>
       )}
       {leveledUp && newLevel !== undefined && (
         <Box flexDirection="column" marginTop={1}>
