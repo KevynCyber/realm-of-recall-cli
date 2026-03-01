@@ -49,8 +49,10 @@ import {
 } from "../../core/player/ClassAbilities.js";
 import type { ClassAbility, ActiveAbility, AbilityEffect } from "../../core/player/ClassAbilities.js";
 import type { CombatSettings } from "../../core/progression/AscensionSystem.js";
+import { calculateWagerResult, WAGER_LABELS } from "../../core/combat/WagerSystem.js";
+import type { WagerLevel, WagerResult } from "../../core/combat/WagerSystem.js";
 
-type Phase = "encounter_preview" | "intro" | "card" | "resolve" | "result" | "reflection" | "ability_menu";
+type Phase = "encounter_preview" | "intro" | "card" | "wager" | "resolve" | "result" | "reflection" | "ability_menu";
 
 interface Props {
   cards: Card[];
@@ -144,6 +146,10 @@ export function CombatScreen({
     return getCurrentPhase(bossPhases, 1.0);
   });
   const [phaseTransitionMsg, setPhaseTransitionMsg] = useState<string | null>(null);
+  // Wager state
+  const [currentWager, setCurrentWager] = useState<WagerLevel>("none");
+  const [wagerResults, setWagerResults] = useState<WagerResult[]>([]);
+  const [lastWagerResult, setLastWagerResult] = useState<WagerResult | null>(null);
   // Suspend/bury confirmation
   const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
   // Undo support: snapshot of combat state before last answer
@@ -368,6 +374,17 @@ export function CombatScreen({
       }
       setLastQuality(quality);
 
+      // Resolve wager if active
+      if (currentWager !== "none") {
+        const isCorrect = quality === AnswerQuality.Perfect || quality === AnswerQuality.Correct;
+        const wagerResult = calculateWagerResult(currentWager, isCorrect, player.gold);
+        setLastWagerResult(wagerResult);
+        setWagerResults((prev) => [...prev, wagerResult]);
+        setCurrentWager("none");
+      } else {
+        setLastWagerResult(null);
+      }
+
       // Track per-card answer quality for FSRS scheduling
       setCardResults((prev) => [...prev, { cardId: currentCard.id, quality }]);
 
@@ -469,14 +486,34 @@ export function CombatScreen({
     [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings, cardQueue, requeueCounts, parsedEffects],
   );
 
-  // -- Handle [A] key to open ability menu during card phase --
+  // -- Handle [A] key to open ability menu, [W] to open wager during card phase --
   useInput(
     (input) => {
       if (input.toLowerCase() === "a" && unlockedAbilities.length > 0) {
         setPhase("ability_menu");
+      } else if (input.toLowerCase() === "w" && player.gold > 0) {
+        setPhase("wager");
       }
     },
     { isActive: phase === "card" && !cardActionMsg },
+  );
+
+  // -- Handle wager selection --
+  useInput(
+    (input, key) => {
+      if (key.escape || input.toLowerCase() === "b") {
+        setCurrentWager("none");
+        setPhase("card");
+        return;
+      }
+      const levels: WagerLevel[] = ["none", "low", "high", "all_in"];
+      const idx = parseInt(input, 10) - 1;
+      if (idx >= 0 && idx < levels.length) {
+        setCurrentWager(levels[idx]);
+        setPhase("card");
+      }
+    },
+    { isActive: phase === "wager" },
   );
 
   // -- Handle [S] suspend / [B] bury during card phase --
@@ -579,10 +616,11 @@ export function CombatScreen({
         // If there's loot and it hasn't been dismissed yet, wait for LootDrop
         if (loot && !lootDismissed) return;
 
+        const wagerNet = wagerResults.reduce((sum, w) => sum + w.goldDelta, 0);
         const result: CombatResult = {
           victory,
           xpEarned: rewards?.xp ?? 0,
-          goldEarned: rewards?.gold ?? 0,
+          goldEarned: (rewards?.gold ?? 0) + wagerNet,
           loot: loot,
           events: combat.events,
           cardsReviewed: combat.currentCardIndex,
@@ -673,6 +711,35 @@ export function CombatScreen({
           )}
           <Box marginTop={1}>
             <Text dimColor italic>Press [1-{unlockedAbilities.length}] to use, [B/Esc] to cancel</Text>
+          </Box>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Wager phase
+  if (phase === "wager") {
+    const levels: WagerLevel[] = ["none", "low", "high", "all_in"];
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box marginBottom={1}>
+          <EnemyDisplay enemy={combat.enemy} />
+        </Box>
+        <Box marginBottom={1}>
+          <Text bold>Gold: </Text>
+          <Text color="yellow">{player.gold}</Text>
+        </Box>
+        <Box flexDirection="column" borderStyle="round" borderColor="yellow" paddingX={1} paddingY={1}>
+          <Text bold color="yellow">Wager Gold</Text>
+          <Text dimColor>Risk gold on your confidence — correct answers double it!</Text>
+          {levels.map((level, idx) => (
+            <Text key={level}>
+              <Text bold color="yellow">[{idx + 1}]</Text> {WAGER_LABELS[level]}
+              {level === currentWager ? <Text color="green"> *</Text> : null}
+            </Text>
+          ))}
+          <Box marginTop={1}>
+            <Text dimColor italic>Press [1-4] to choose, [B/Esc] to cancel</Text>
           </Box>
         </Box>
       </Box>
@@ -851,8 +918,11 @@ export function CombatScreen({
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
           </Box>
+          {currentWager !== "none" && (
+            <Text color="yellow" bold>Wager: {WAGER_LABELS[currentWager]}</Text>
+          )}
           <Text dimColor italic>
-            {unlockedAbilities.length > 0 ? "Press [A] abilities | " : ""}[S] suspend | [B] bury
+            {unlockedAbilities.length > 0 ? "[A] abilities | " : ""}[W] wager | [S] suspend | [B] bury
           </Text>
         </>
       )}
@@ -870,6 +940,11 @@ export function CombatScreen({
           {currentCard && (
             <Text dimColor>
               Answer: <Text color="green">{cardQueue[combat.currentCardIndex - 1]?.back ?? ""}</Text>
+            </Text>
+          )}
+          {lastWagerResult && (
+            <Text color={lastWagerResult.goldDelta >= 0 ? "yellow" : "red"} bold>
+              Wager: {lastWagerResult.goldDelta >= 0 ? "+" : ""}{lastWagerResult.goldDelta}g
             </Text>
           )}
           {lastDamage !== null && (
