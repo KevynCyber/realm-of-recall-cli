@@ -235,4 +235,8 @@ const migrations = [
     name: "006_desired_retention",
     sql: `ALTER TABLE player ADD COLUMN desired_retention REAL NOT NULL DEFAULT 0.9;`,
   },
+  {
+    name: "007_max_new_cards_per_day",
+    sql: `ALTER TABLE player ADD COLUMN max_new_cards_per_day INTEGER NOT NULL DEFAULT 20;`,
+  },
 ];

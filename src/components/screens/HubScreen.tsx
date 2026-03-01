@@ -5,6 +5,7 @@ import { useGameTheme } from "../app/ThemeProvider.js";
 interface Props {
   cardsDue: number;
   streakAtRisk: boolean;
+  newCardsRemaining: number;
   onNavigate: (screen: string) => void;
 }
 
@@ -20,7 +21,7 @@ const MENU_ITEMS = [
   { key: "9", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
 ] as const;
 
-export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {
+export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, onNavigate }: Props) {
   const theme = useGameTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -67,6 +68,12 @@ export function HubScreen({ cardsDue, streakAtRisk, onNavigate }: Props) {
           </Text>
         </Box>
       )}
+
+      <Box paddingX={1}>
+        <Text color={theme.colors.mana}>
+          {newCardsRemaining} new cards remaining today
+        </Text>
+      </Box>
 
       {streakAtRisk && (
         <Box paddingX={1}>

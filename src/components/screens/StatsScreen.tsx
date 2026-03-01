@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Box, Text, useInput } from "ink";
 import { useGameTheme } from "../app/ThemeProvider.js";
 import type { Player } from "../../types/player.js";
@@ -23,12 +23,16 @@ interface FsrsStats {
 /** Valid desired retention presets */
 const RETENTION_PRESETS = [0.70, 0.75, 0.80, 0.85, 0.90, 0.92, 0.95, 0.97] as const;
 
+/** Valid max new cards per day presets */
+const NEW_CARDS_PRESETS = [5, 10, 15, 20, 30, 50, 100, 9999] as const;
+
 interface Props {
   player: Player;
   deckStats: DeckStat[];
   fsrsStats: FsrsStats;
   onBack: () => void;
   onUpdateRetention?: (retention: number) => void;
+  onUpdateMaxNewCards?: (maxNewCards: number) => void;
   // Ultra-learner props (all optional for backward compat)
   accuracyTrend?: TrendResult;
   speedTrend?: TrendResult;
@@ -55,12 +59,14 @@ export function StatsScreen({
   fsrsStats,
   onBack,
   onUpdateRetention,
+  onUpdateMaxNewCards,
   accuracyTrend,
   speedTrend,
   consistencyGrid,
   wisdomXp,
 }: Props) {
   const theme = useGameTheme();
+  const [settingsTab, setSettingsTab] = useState<"retention" | "newcards">("retention");
 
   useInput((input, key) => {
     if (key.escape || input === "b") {
@@ -68,13 +74,27 @@ export function StatsScreen({
       return;
     }
 
-    // Handle retention preset selection (keys 1-8)
-    if (onUpdateRetention) {
-      const num = parseInt(input, 10);
-      if (num >= 1 && num <= RETENTION_PRESETS.length) {
+    // Switch settings tab
+    if (input === "r" && (onUpdateRetention || onUpdateMaxNewCards)) {
+      setSettingsTab("retention");
+      return;
+    }
+    if (input === "n" && (onUpdateRetention || onUpdateMaxNewCards)) {
+      setSettingsTab("newcards");
+      return;
+    }
+
+    const num = parseInt(input, 10);
+    if (num >= 1 && num <= 8) {
+      if (settingsTab === "retention" && onUpdateRetention) {
         const newRetention = RETENTION_PRESETS[num - 1];
         if (newRetention !== player.desiredRetention) {
           onUpdateRetention(newRetention);
+        }
+      } else if (settingsTab === "newcards" && onUpdateMaxNewCards) {
+        const newMax = NEW_CARDS_PRESETS[num - 1];
+        if (newMax !== player.maxNewCardsPerDay) {
+          onUpdateMaxNewCards(newMax);
         }
       }
     }
@@ -213,32 +233,75 @@ export function StatsScreen({
         </Box>
       )}
 
-      {/* Section 9 — Settings: Desired Retention */}
-      {onUpdateRetention && (
+      {/* Section 9 — Settings */}
+      {(onUpdateRetention || onUpdateMaxNewCards) && (
         <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
-          <Text bold color={theme.colors.rare}>
-            Settings: Desired Retention
-          </Text>
-          <Text color={theme.colors.muted}>
-            Higher = more frequent reviews, stronger memory. Lower = fewer reviews, more forgetting.
-          </Text>
-          <Text>
-            Current: <Text bold color={theme.colors.success}>{(player.desiredRetention * 100).toFixed(0)}%</Text>
-          </Text>
-          <Box marginTop={1} flexDirection="column">
-            {RETENTION_PRESETS.map((preset, i) => {
-              const isActive = preset === player.desiredRetention;
-              return (
-                <Text key={preset}>
-                  <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
-                    {isActive ? "> " : "  "}[{i + 1}] {(preset * 100).toFixed(0)}%
-                    {preset === 0.90 ? " (default)" : ""}
-                    {isActive ? " *" : ""}
-                  </Text>
-                </Text>
-              );
-            })}
+          <Box marginBottom={1}>
+            <Text bold={settingsTab === "retention"} color={settingsTab === "retention" ? theme.colors.rare : theme.colors.muted}>
+              [R] Retention
+            </Text>
+            <Text>{"  "}</Text>
+            <Text bold={settingsTab === "newcards"} color={settingsTab === "newcards" ? theme.colors.rare : theme.colors.muted}>
+              [N] New Cards/Day
+            </Text>
           </Box>
+
+          {settingsTab === "retention" && onUpdateRetention && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Desired Retention
+              </Text>
+              <Text color={theme.colors.muted}>
+                Higher = more frequent reviews, stronger memory. Lower = fewer reviews, more forgetting.
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{(player.desiredRetention * 100).toFixed(0)}%</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {RETENTION_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.desiredRetention;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {(preset * 100).toFixed(0)}%
+                        {preset === 0.90 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
+
+          {settingsTab === "newcards" && onUpdateMaxNewCards && (
+            <>
+              <Text bold color={theme.colors.rare}>
+                Settings: Max New Cards Per Day
+              </Text>
+              <Text color={theme.colors.muted}>
+                Limits how many never-seen cards are introduced each day. Review cards are always shown.
+              </Text>
+              <Text>
+                Current: <Text bold color={theme.colors.success}>{player.maxNewCardsPerDay === 9999 ? "Unlimited" : player.maxNewCardsPerDay}</Text>
+              </Text>
+              <Box marginTop={1} flexDirection="column">
+                {NEW_CARDS_PRESETS.map((preset, i) => {
+                  const isActive = preset === player.maxNewCardsPerDay;
+                  const label = preset === 9999 ? "Unlimited" : `${preset}`;
+                  return (
+                    <Text key={preset}>
+                      <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                        {isActive ? "> " : "  "}[{i + 1}] {label}
+                        {preset === 20 ? " (default)" : ""}
+                        {isActive ? " *" : ""}
+                      </Text>
+                    </Text>
+                  );
+                })}
+              </Box>
+            </>
+          )}
         </Box>
       )}
 
@@ -246,8 +309,8 @@ export function StatsScreen({
       <Box paddingX={1}>
         <Text color={theme.colors.muted}>
           Press <Text bold>Esc</Text> or <Text bold>b</Text> to go back
-          {onUpdateRetention ? (
-            <Text>{" | "}<Text bold>1-8</Text> to change retention</Text>
+          {(onUpdateRetention || onUpdateMaxNewCards) ? (
+            <Text>{" | "}<Text bold>1-8</Text> to change setting{" | "}<Text bold>R/N</Text> to switch tab</Text>
           ) : null}
         </Text>
       </Box>

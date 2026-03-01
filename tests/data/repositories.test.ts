@@ -909,4 +909,218 @@ describe("StatsRepository", () => {
       expect(history[0]).toBeCloseTo(3.0, 5);
     });
   });
+
+  describe("getNewCardsSeenToday", () => {
+    beforeEach(() => {
+      cardRepo.insertCards([
+        { ...testCard, id: "card2" },
+        { ...testCard, id: "card3" },
+      ]);
+    });
+
+    it("returns 0 when no cards have been reviewed", () => {
+      expect(statsRepo.getNewCardsSeenToday()).toBe(0);
+    });
+
+    it("counts cards first seen today", () => {
+      // Review card1 for the first time today
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+
+      expect(statsRepo.getNewCardsSeenToday()).toBe(1);
+    });
+
+    it("does not count cards first seen before today", () => {
+      // Review card1 yesterday
+      const yesterday = Date.now() - 86400000 * 2;
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: yesterday,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+
+      expect(statsRepo.getNewCardsSeenToday()).toBe(0);
+    });
+
+    it("does not double-count cards reviewed multiple times today", () => {
+      const now = Date.now();
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: now,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: now + 1000,
+          responseTime: 1.5,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "review" }),
+      );
+
+      expect(statsRepo.getNewCardsSeenToday()).toBe(1);
+    });
+
+    it("filters by deck ID", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.insertCard({ ...testCard, id: "d2c1", deckId: "deck2" });
+
+      const now = Date.now();
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: now,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning" }),
+      );
+      statsRepo.recordAttempt(
+        "d2c1",
+        {
+          cardId: "d2c1",
+          timestamp: now,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "d2c1", state: "learning" }),
+      );
+
+      expect(statsRepo.getNewCardsSeenToday("deck1")).toBe(1);
+      expect(statsRepo.getNewCardsSeenToday("deck2")).toBe(1);
+      expect(statsRepo.getNewCardsSeenToday(["deck1", "deck2"])).toBe(2);
+    });
+  });
+
+  describe("getDueCardsWithNewLimit", () => {
+    beforeEach(() => {
+      cardRepo.insertCards([
+        { ...testCard, id: "card2" },
+        { ...testCard, id: "card3" },
+        { ...testCard, id: "card4" },
+        { ...testCard, id: "card5" },
+      ]);
+    });
+
+    it("limits new cards to maxNewCards when all are new", () => {
+      // All 5 cards are new, limit to 2
+      const { cardIds, newCardsRemaining } = statsRepo.getDueCardsWithNewLimit("deck1", 2);
+      // Should have exactly 2 new cards (no review cards)
+      expect(cardIds).toHaveLength(2);
+      expect(newCardsRemaining).toBe(0);
+    });
+
+    it("allows all review cards through regardless of limit", () => {
+      // Make card1 and card2 review cards with past-due dates
+      const pastDue = new Date(Date.now() - 86400000).toISOString();
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now() - 172800000,
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "review", due: pastDue }),
+      );
+      statsRepo.recordAttempt(
+        "card2",
+        {
+          cardId: "card2",
+          timestamp: Date.now() - 172800000,
+          responseTime: 2.0,
+          quality: AnswerQuality.Perfect,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card2", state: "review", due: pastDue }),
+      );
+
+      // Set new card limit to 1
+      const { cardIds } = statsRepo.getDueCardsWithNewLimit("deck1", 1);
+      // Should have 2 review cards + 1 new card = 3
+      expect(cardIds).toContain("card1");
+      expect(cardIds).toContain("card2");
+      expect(cardIds).toHaveLength(3); // 2 review + 1 new
+    });
+
+    it("subtracts cards already seen today from new card budget", () => {
+      // Review card1 for the first time today
+      statsRepo.recordAttempt(
+        "card1",
+        {
+          cardId: "card1",
+          timestamp: Date.now(),
+          responseTime: 2.0,
+          quality: AnswerQuality.Correct,
+          wasTimed: false,
+        },
+        makeSchedule({ cardId: "card1", state: "learning", due: new Date(Date.now() + 86400000).toISOString() }),
+      );
+
+      // Max 2 new per day, 1 already seen today = 1 remaining
+      const { cardIds, newCardsRemaining } = statsRepo.getDueCardsWithNewLimit("deck1", 2);
+      // card1 is now learning (not new, not due yet — future due date), so won't appear
+      // card2, card3, card4, card5 are new but only 1 should be allowed
+      const newCardCount = cardIds.filter(id => id !== "card1").length;
+      expect(newCardCount).toBe(1);
+      expect(newCardsRemaining).toBe(0);
+    });
+
+    it("returns 0 new cards remaining when limit is reached", () => {
+      const { newCardsRemaining } = statsRepo.getDueCardsWithNewLimit("deck1", 0);
+      expect(newCardsRemaining).toBe(0);
+    });
+
+    it("works with deck ID arrays", () => {
+      cardRepo.createDeck({ id: "deck2", name: "Deck 2", description: "", createdAt: new Date().toISOString(), equipped: true });
+      cardRepo.insertCards([
+        { ...testCard, id: "d2c1", deckId: "deck2" },
+        { ...testCard, id: "d2c2", deckId: "deck2" },
+      ]);
+
+      const { cardIds } = statsRepo.getDueCardsWithNewLimit(["deck1", "deck2"], 3);
+      // Should have at most 3 new cards across both decks
+      expect(cardIds).toHaveLength(3);
+    });
+
+    it("respects overall limit", () => {
+      const { cardIds } = statsRepo.getDueCardsWithNewLimit("deck1", 20, 2);
+      expect(cardIds).toHaveLength(2);
+    });
+
+    it("returns positive newCardsRemaining when budget exceeds new cards available", () => {
+      // Only 5 new cards exist, budget is 10
+      const { cardIds, newCardsRemaining } = statsRepo.getDueCardsWithNewLimit("deck1", 10);
+      expect(cardIds).toHaveLength(5);
+      expect(newCardsRemaining).toBe(5); // 10 - 5 = 5
+    });
+  });
 });

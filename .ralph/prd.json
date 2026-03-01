@@ -130,7 +130,7 @@
         "Tests pass"
       ],
       "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": "Currently importing a 500-card deck results in all 500 due immediately. Anki defaults to 20 new/day."
     },
     {

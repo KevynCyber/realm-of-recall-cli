@@ -36,6 +36,7 @@ function makeState(overrides: Partial<AchievementState> = {}): AchievementState 
       dailyChallengeScore: 0,
       dailyChallengeDate: null,
       desiredRetention: 0.9,
+      maxNewCardsPerDay: 20,
       createdAt: "2024-01-01",
     },
     totalMasteredCards: 0,

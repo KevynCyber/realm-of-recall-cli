@@ -430,6 +430,182 @@ export class StatsRepository {
     }));
   }
 
+  /**
+   * Count new cards that were first seen (had their first attempt) today.
+   */
+  getNewCardsSeenToday(deckId?: string | string[]): number {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayStartMs = todayStart.getTime();
+
+    let query: string;
+    let params: any[];
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return 0;
+      const placeholders = deckId.map(() => "?").join(",");
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        JOIN cards c ON c.id = ra.card_id
+        WHERE c.deck_id IN (${placeholders})
+          AND ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [...deckId, todayStartMs, todayStartMs];
+    } else if (deckId) {
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        JOIN cards c ON c.id = ra.card_id
+        WHERE c.deck_id = ?
+          AND ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [deckId, todayStartMs, todayStartMs];
+    } else {
+      query = `
+        SELECT COUNT(DISTINCT ra.card_id) as count
+        FROM recall_attempts ra
+        WHERE ra.timestamp >= ?
+          AND NOT EXISTS (
+            SELECT 1 FROM recall_attempts ra2
+            WHERE ra2.card_id = ra.card_id
+              AND ra2.timestamp < ?
+          )
+      `;
+      params = [todayStartMs, todayStartMs];
+    }
+
+    const row = this.db.prepare(query).get(...params) as any;
+    return row.count;
+  }
+
+  /**
+   * Get due cards with a limit on new (never-seen) cards.
+   * Review/learning/relearning cards are always included (up to overall limit).
+   * New cards are capped at maxNewCards minus new cards already seen today.
+   */
+  getDueCardsWithNewLimit(
+    deckId: string | string[] | undefined,
+    maxNewCards: number,
+    overallLimit?: number,
+  ): { cardIds: string[]; newCardsRemaining: number } {
+    const effectiveOverallLimit = overallLimit ?? 9999;
+
+    // Count how many new cards were already introduced today
+    const seenToday = this.getNewCardsSeenToday(deckId);
+    const newCardBudget = Math.max(0, maxNewCards - seenToday);
+
+    // Get all review cards (non-new, due now)
+    const reviewCardIds = this.getReviewDueCards(deckId);
+
+    // Get new cards (capped at budget)
+    const newCardIds = this.getNewCardIds(deckId, newCardBudget);
+
+    // Combine: review cards first (they're time-sensitive), then new cards
+    const combined = [...reviewCardIds, ...newCardIds];
+    const limited = combined.slice(0, effectiveOverallLimit);
+
+    return {
+      cardIds: limited,
+      newCardsRemaining: newCardBudget - newCardIds.length,
+    };
+  }
+
+  /**
+   * Get IDs of review/learning/relearning cards that are currently due.
+   * Excludes new cards.
+   */
+  private getReviewDueCards(deckId?: string | string[]): string[] {
+    const now = new Date().toISOString();
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id IN (${placeholders})
+          AND rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(...deckId, now) as any[];
+      return rows.map((r) => r.id);
+    } else if (deckId) {
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id = ?
+          AND rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(deckId, now) as any[];
+      return rows.map((r) => r.id);
+    } else {
+      const query = `
+        SELECT c.id FROM cards c
+        JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE rs.card_state != 'new'
+          AND rs.next_review_at <= ?
+        ORDER BY rs.next_review_at ASC
+      `;
+      const rows = this.db.prepare(query).all(now) as any[];
+      return rows.map((r) => r.id);
+    }
+  }
+
+  /**
+   * Get IDs of new cards (never reviewed), limited to `limit`.
+   */
+  private getNewCardIds(deckId?: string | string[], limit?: number): string[] {
+    const effectiveLimit = limit ?? 9999;
+    if (effectiveLimit <= 0) return [];
+
+    if (Array.isArray(deckId)) {
+      if (deckId.length === 0) return [];
+      const placeholders = deckId.map(() => "?").join(",");
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id IN (${placeholders})
+          AND (rs.card_state IS NULL OR rs.card_state = 'new')
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(...deckId, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else if (deckId) {
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE c.deck_id = ?
+          AND (rs.card_state IS NULL OR rs.card_state = 'new')
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(deckId, effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    } else {
+      const query = `
+        SELECT c.id FROM cards c
+        LEFT JOIN recall_stats rs ON rs.card_id = c.id
+        WHERE rs.card_state IS NULL OR rs.card_state = 'new'
+        LIMIT ?
+      `;
+      const rows = this.db.prepare(query).all(effectiveLimit) as any[];
+      return rows.map((r) => r.id);
+    }
+  }
+
   getTotalReviewed(): number {
     const row = this.db
       .prepare("SELECT COUNT(DISTINCT card_id) as count FROM recall_attempts")
