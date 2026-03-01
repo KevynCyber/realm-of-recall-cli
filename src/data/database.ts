@@ -272,4 +272,14 @@ const migrations = [
       );
     `,
   },
+  {
+    name: "013_unlocks",
+    sql: `
+      CREATE TABLE unlocks (
+        id INTEGER PRIMARY KEY,
+        key TEXT UNIQUE NOT NULL,
+        unlocked_at TEXT DEFAULT NULL
+      );
+    `,
+  },
 ];

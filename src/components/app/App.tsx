@@ -94,6 +94,8 @@ import {
   isBreakSuppressed,
 } from "../../core/session/SessionGuardrails.js";
 import { calculateIdleRewards } from "../../core/progression/IdleRewards.js";
+import { getUnlocksForAscension } from "../../core/progression/MetaUnlocks.js";
+import { UnlockRepository } from "../../data/repositories/UnlockRepository.js";
 import type { BreakLevel } from "../../core/session/SessionGuardrails.js";
 import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.js";
 import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
@@ -1411,6 +1413,13 @@ export default function App() {
                 setMapAscensionLevel(updated.ascensionLevel);
                 setMapCanAscend(false);
                 checkAchievements(updated);
+
+                // Award any newly earned meta-progression unlocks
+                const unlockRepo = new UnlockRepository(db);
+                const earned = getUnlocksForAscension(updated.ascensionLevel);
+                for (const unlock of earned) {
+                  unlockRepo.unlock(unlock.key);
+                }
               } catch {
                 // ignore
               }
