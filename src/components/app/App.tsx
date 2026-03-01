@@ -88,6 +88,7 @@ import {
   getBreakMessage,
   isBreakSuppressed,
 } from "../../core/session/SessionGuardrails.js";
+import { calculateIdleRewards } from "../../core/progression/IdleRewards.js";
 import type { BreakLevel } from "../../core/session/SessionGuardrails.js";
 import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.js";
 import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
@@ -232,6 +233,9 @@ export default function App() {
   const [backlogOverdueCount, setBacklogOverdueCount] = useState(0);
   const [backlogOverdueCardIds, setBacklogOverdueCardIds] = useState<string[]>([]);
 
+  // Idle progression banner
+  const [idleBanner, setIdleBanner] = useState<string | null>(null);
+
   // Marginal gains data for stats screen
   const [accuracyTrend, setAccuracyTrend] = useState<TrendResult | undefined>(
     undefined,
@@ -275,6 +279,28 @@ export default function App() {
       const playerRepo = new PlayerRepository(db);
       const p = playerRepo.getPlayer();
       if (p) {
+        // Compute idle rewards before setting player state
+        const idleResult = calculateIdleRewards(
+          p.lastLoginAt,
+          new Date(),
+          p.hp,
+          p.maxHp,
+        );
+        if (idleResult && (idleResult.gold > 0 || idleResult.hpRecovered > 0)) {
+          p.gold += idleResult.gold;
+          p.hp = Math.min(p.hp + idleResult.hpRecovered, p.maxHp);
+          p.lastLoginAt = new Date().toISOString();
+          playerRepo.updatePlayer(p);
+          const parts: string[] = [];
+          if (idleResult.gold > 0) parts.push(`Earned ${idleResult.gold} gold`);
+          if (idleResult.hpRecovered > 0) parts.push(`recovered ${idleResult.hpRecovered} HP`);
+          setIdleBanner(`Welcome back! ${parts.join(", ")} while training.`);
+          setTimeout(() => setIdleBanner(null), 3000);
+        } else {
+          // Update last_login_at even if no rewards
+          p.lastLoginAt = new Date().toISOString();
+          playerRepo.updatePlayer(p);
+        }
         setPlayer(p);
         const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
@@ -1164,6 +1190,7 @@ export default function App() {
             cardsDue={cardsDue}
             streakAtRisk={streakAtRisk}
             newCardsRemaining={newCardsRemaining}
+            idleBanner={idleBanner}
             onNavigate={navigateToScreen}
           />
         );

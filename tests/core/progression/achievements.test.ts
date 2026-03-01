@@ -38,6 +38,7 @@ function makeState(overrides: Partial<AchievementState> = {}): AchievementState 
       desiredRetention: 0.9,
       maxNewCardsPerDay: 20,
       timerSeconds: 30,
+      lastLoginAt: null,
       createdAt: "2024-01-01",
     },
     totalMasteredCards: 0,

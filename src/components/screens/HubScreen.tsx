@@ -6,6 +6,7 @@ interface Props {
   cardsDue: number;
   streakAtRisk: boolean;
   newCardsRemaining: number;
+  idleBanner?: string | null;
   onNavigate: (screen: string) => void;
 }
 
@@ -22,7 +23,7 @@ const MENU_ITEMS = [
   { key: "0", label: "Create Cards", description: "Author new flashcards", screen: "create_cards" },
 ] as const;
 
-export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, onNavigate }: Props) {
+export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanner, onNavigate }: Props) {
   const theme = useGameTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -43,6 +44,11 @@ export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, onNavigat
 
   return (
     <Box flexDirection="column">
+      {idleBanner && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text color={theme.colors.gold}>{idleBanner}</Text>
+        </Box>
+      )}
       <Box borderStyle="round" flexDirection="column" paddingX={1}>
         <Text bold>Realm of Recall</Text>
         <Box marginTop={1} flexDirection="column">

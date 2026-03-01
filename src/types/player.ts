@@ -76,5 +76,6 @@ export interface Player {
   desiredRetention: number;
   maxNewCardsPerDay: number;
   timerSeconds: number;
+  lastLoginAt: string | null;
   createdAt: string;
 }

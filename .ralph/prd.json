@@ -371,7 +371,7 @@
         "Tests pass"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "Idle game research: 'feeling of lost opportunity' from capped offline earnings creates gentle daily pull (Machinations.io). No SRS tool has idle progression."
     },
     {

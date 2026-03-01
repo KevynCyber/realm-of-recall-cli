@@ -39,6 +39,7 @@ export class PlayerRepository {
       desiredRetention: row.desired_retention ?? 0.9,
       maxNewCardsPerDay: row.max_new_cards_per_day ?? 20,
       timerSeconds: row.timer_seconds ?? 30,
+      lastLoginAt: row.last_login_at ?? null,
       createdAt: row.created_at,
     };
   }
@@ -51,8 +52,8 @@ export class PlayerRepository {
           total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp,
           ascension_level, skill_points, daily_challenge_seed, daily_challenge_completed,
           daily_challenge_score, daily_challenge_date, desired_retention, max_new_cards_per_day,
-          timer_seconds, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          timer_seconds, last_login_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         player.id,
@@ -83,6 +84,7 @@ export class PlayerRepository {
         player.desiredRetention,
         player.maxNewCardsPerDay,
         player.timerSeconds,
+        player.lastLoginAt,
         player.createdAt,
       );
   }
@@ -97,7 +99,7 @@ export class PlayerRepository {
           combat_wins = ?, combat_losses = ?, wisdom_xp = ?, ascension_level = ?,
           skill_points = ?, daily_challenge_seed = ?, daily_challenge_completed = ?,
           daily_challenge_score = ?, daily_challenge_date = ?, desired_retention = ?,
-          max_new_cards_per_day = ?, timer_seconds = ?, created_at = ?
+          max_new_cards_per_day = ?, timer_seconds = ?, last_login_at = ?, created_at = ?
          WHERE id = 1`,
       )
       .run(
@@ -128,6 +130,7 @@ export class PlayerRepository {
         player.desiredRetention,
         player.maxNewCardsPerDay,
         player.timerSeconds,
+        player.lastLoginAt,
         player.createdAt,
       );
   }

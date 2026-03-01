@@ -77,6 +77,7 @@ export function createNewPlayer(name: string, playerClass: PlayerClass): Player 
     desiredRetention: 0.9,
     maxNewCardsPerDay: 20,
     timerSeconds: 30,
+    lastLoginAt: new Date().toISOString(),
     createdAt: new Date().toISOString(),
   };
 }
