@@ -224,7 +224,7 @@
         "Tests pass"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Returning to a wall of 200 overdue cards causes most SRS users to quit. Duolingo's gentle re-engagement significantly reduces churn."
     },
     {

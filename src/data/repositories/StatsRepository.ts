@@ -684,4 +684,36 @@ export class StatsRepository {
       .get() as any;
     return row.count;
   }
+
+  /**
+   * Get overdue card IDs (cards past their next_review_at, non-new state).
+   * Ordered by stability DESC so highest-stability cards come first
+   * (most likely to still be remembered — ideal for gentle catch-up).
+   * Excludes suspended and buried cards.
+   */
+  getOverdueCardIds(): string[] {
+    const now = new Date().toISOString();
+    const query = `
+      SELECT c.id FROM cards c
+      JOIN recall_stats rs ON rs.card_id = c.id
+      WHERE rs.card_state != 'new'
+        AND rs.next_review_at <= ?
+        AND (rs.suspended IS NULL OR rs.suspended = 0)
+        AND (rs.buried_until IS NULL OR rs.buried_until <= ?)
+      ORDER BY rs.stability DESC
+    `;
+    const rows = this.db.prepare(query).all(now, now) as any[];
+    return rows.map((r) => r.id);
+  }
+
+  /**
+   * Get the most recent review timestamp across all cards (milliseconds).
+   * Returns null if no reviews have been recorded.
+   */
+  getLastReviewTimestamp(): number | null {
+    const row = this.db
+      .prepare("SELECT MAX(timestamp) as ts FROM recall_attempts")
+      .get() as any;
+    return row?.ts ?? null;
+  }
 }

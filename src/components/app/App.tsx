@@ -21,6 +21,12 @@ import {
   createDungeonRun,
 } from "../../core/combat/DungeonRun.js";
 import { RandomEventScreen } from "../screens/RandomEventScreen.js";
+import { WelcomeBackScreen } from "../screens/WelcomeBackScreen.js";
+import {
+  getBacklogInfo,
+  getBacklogSessionCardIds,
+} from "../../core/backlog/BacklogManager.js";
+import type { BacklogSessionOption } from "../../core/backlog/BacklogManager.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
 import type { ReviewResult } from "../review/ReviewScreen.js";
 import { ReviewSummary } from "../review/ReviewSummary.js";
@@ -98,6 +104,7 @@ import type { TrendResult } from "../../core/analytics/MarginalGains.js";
 export type Screen =
   | "title"
   | "hub"
+  | "welcome_back"
   | "combat"
   | "review"
   | "review_summary"
@@ -214,6 +221,11 @@ export default function App() {
   const [showBreakScreen, setShowBreakScreen] = useState(false);
   const sessionCardsReviewed = useRef(0);
 
+  // Backlog / Welcome Back state
+  const [backlogDaysSince, setBacklogDaysSince] = useState(0);
+  const [backlogOverdueCount, setBacklogOverdueCount] = useState(0);
+  const [backlogOverdueCardIds, setBacklogOverdueCardIds] = useState<string[]>([]);
+
   // Marginal gains data for stats screen
   const [accuracyTrend, setAccuracyTrend] = useState<TrendResult | undefined>(
     undefined,
@@ -258,7 +270,6 @@ export default function App() {
       const p = playerRepo.getPlayer();
       if (p) {
         setPlayer(p);
-        setScreen("hub");
         const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
         const equippedIds = cardRepo.getEquippedDeckIds();
@@ -266,6 +277,19 @@ export default function App() {
         const { cardIds, newCardsRemaining: remaining } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 9999);
         setCardsDue(cardIds.length);
         setNewCardsRemaining(remaining);
+
+        // Check for backlog to show WelcomeBack flow
+        const overdueIds = statsRepo.getOverdueCardIds();
+        const lastReviewTs = statsRepo.getLastReviewTimestamp();
+        const backlog = getBacklogInfo(overdueIds.length, lastReviewTs);
+        if (backlog.shouldShowWelcomeBack) {
+          setBacklogDaysSince(backlog.daysSinceLastReview);
+          setBacklogOverdueCount(backlog.overdueCount);
+          setBacklogOverdueCardIds(overdueIds);
+          setScreen("welcome_back");
+        } else {
+          setScreen("hub");
+        }
       }
     } catch {
       // ignore — show title screen
@@ -856,6 +880,33 @@ export default function App() {
     [player, refreshCardsDue],
   );
 
+  const handleWelcomeBackSelect = useCallback(
+    (option: BacklogSessionOption) => {
+      try {
+        const db = getDatabase();
+        const cardRepo = new CardRepository(db);
+        const selectedIds = getBacklogSessionCardIds(option, backlogOverdueCardIds);
+        const cards = selectedIds
+          .map((id) => cardRepo.getCard(id))
+          .filter((c): c is Card => c !== undefined);
+        if (cards.length === 0) {
+          setScreen("hub");
+          return;
+        }
+        // Select retrieval mode for the catch-up review session
+        const mode = selectMode("review", [], sessionModes);
+        setCurrentRetrievalMode(mode);
+        setSessionModes((prev) => [...prev, mode]);
+        setCombatCards(cards);
+        setReviewResults([]);
+        setScreen("review");
+      } catch {
+        setScreen("hub");
+      }
+    },
+    [backlogOverdueCardIds, sessionModes],
+  );
+
   const handleReflectionComplete = useCallback(
     (result: {
       difficultyRating: 1 | 2 | 3;
@@ -1009,6 +1060,7 @@ export default function App() {
   useInput((input, key) => {
     if (
       screen === "title" ||
+      screen === "welcome_back" ||
       screen === "combat" ||
       screen === "review" ||
       screen === "reflection" ||
@@ -1045,6 +1097,14 @@ export default function App() {
             streakAtRisk={streakAtRisk}
             newCardsRemaining={newCardsRemaining}
             onNavigate={navigateToScreen}
+          />
+        );
+      case "welcome_back":
+        return (
+          <WelcomeBackScreen
+            daysSinceLastReview={backlogDaysSince}
+            overdueCount={backlogOverdueCount}
+            onSelectOption={handleWelcomeBackSelect}
           />
         );
       case "combat":
