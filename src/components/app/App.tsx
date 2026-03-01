@@ -68,6 +68,7 @@ import { tryAwardVariant } from "../../core/cards/CardVariants.js";
 import {
   calculateTrend,
 } from "../../core/analytics/MarginalGains.js";
+import { getCardRetentionSummary, getSkipCostForecast } from "../../core/analytics/ForgettingCurve.js";
 import { checkNewAchievements } from "../../core/progression/Achievements.js";
 import type { AchievementState } from "../../core/progression/Achievements.js";
 import { hasPerk } from "../../core/progression/WisdomPerks.js";
@@ -1523,6 +1524,44 @@ export default function App() {
               }
             })()}
             unlockedKeys={unlockedKeys}
+            retentionSummary={(() => {
+              try {
+                const db = getDatabase();
+                const statsRepo = new StatsRepository(db);
+                const allSchedules = statsRepo.getAllSchedules();
+                const now = Date.now();
+                const cards = allSchedules.map((s: any) => ({
+                  stability: s.stability ?? 0,
+                  daysSinceReview: s.lastReview ? (now - new Date(s.lastReview).getTime()) / (1000 * 60 * 60 * 24) : 0,
+                }));
+                return cards.length > 0 ? getCardRetentionSummary(cards) : undefined;
+              } catch (e) { debugLog("App", e);
+                return undefined;
+              }
+            })()}
+            avgSkipCost={(() => {
+              try {
+                const db = getDatabase();
+                const statsRepo = new StatsRepository(db);
+                const allSchedules = statsRepo.getAllSchedules();
+                if (allSchedules.length === 0) return undefined;
+                const now = Date.now();
+                let totalStability = 0;
+                let totalDays = 0;
+                let count = 0;
+                for (const s of allSchedules as any[]) {
+                  if (s.stability > 0) {
+                    totalStability += s.stability;
+                    totalDays += s.lastReview ? (now - new Date(s.lastReview).getTime()) / (1000 * 60 * 60 * 24) : 0;
+                    count++;
+                  }
+                }
+                if (count === 0) return undefined;
+                return getSkipCostForecast(totalStability / count, totalDays / count);
+              } catch (e) { debugLog("App", e);
+                return undefined;
+              }
+            })()}
           />
         ) : null;
       case "achievements":

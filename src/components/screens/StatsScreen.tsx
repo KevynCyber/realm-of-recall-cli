@@ -8,6 +8,7 @@ import type { TrendResult } from "../../core/analytics/MarginalGains.js";
 import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPerks.js";
 import { getAllUnlocks } from "../../core/progression/MetaUnlocks.js";
 import type { MetaUnlock } from "../../core/progression/MetaUnlocks.js";
+import type { CardRetentionSummary, SkipCostForecast } from "../../core/analytics/ForgettingCurve.js";
 
 interface DeckStat {
   name: string;
@@ -53,6 +54,8 @@ interface Props {
   wisdomXp?: number;
   variantCounts?: VariantCounts;
   unlockedKeys?: Set<string>;
+  retentionSummary?: CardRetentionSummary;
+  avgSkipCost?: SkipCostForecast;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -82,6 +85,8 @@ export function StatsScreen({
   wisdomXp,
   variantCounts,
   unlockedKeys,
+  retentionSummary,
+  avgSkipCost,
 }: Props) {
   const theme = useGameTheme();
   const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer">("retention");
@@ -184,6 +189,33 @@ export function StatsScreen({
           {"  "}Relearning: <Text color={theme.colors.error}>{fsrsStats.relearnCount}</Text>
         </Text>
       </Box>
+
+      {/* Section — Memory Health (Forgetting Curve) */}
+      {retentionSummary && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color="magenta">
+            Memory Health
+          </Text>
+          <Text>
+            <Text color={theme.colors.success}>{"\u2713"} Healthy: {retentionSummary.healthy}</Text>
+            {"  "}
+            <Text color={theme.colors.warning}>{"\u26A0"} At Risk: {retentionSummary.atRisk}</Text>
+            {"  "}
+            <Text color={theme.colors.error}>{"\u2717"} Critical: {retentionSummary.critical}</Text>
+          </Text>
+          {avgSkipCost && (
+            <Box flexDirection="column" marginTop={1}>
+              <Text dimColor>Avg retention if you skip sessions:</Text>
+              <Text>
+                {"  "}Today: <Text bold>{avgSkipCost.today.toFixed(0)}%</Text>
+                {"  "}+1 day: <Text color={avgSkipCost.skip1 >= 70 ? theme.colors.success : avgSkipCost.skip1 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip1.toFixed(0)}%</Text>
+                {"  "}+3 days: <Text color={avgSkipCost.skip3 >= 70 ? theme.colors.success : avgSkipCost.skip3 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip3.toFixed(0)}%</Text>
+                {"  "}+7 days: <Text color={avgSkipCost.skip7 >= 70 ? theme.colors.success : avgSkipCost.skip7 >= 40 ? theme.colors.warning : theme.colors.error}>{avgSkipCost.skip7.toFixed(0)}%</Text>
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Section 4 — Streaks */}
       <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
