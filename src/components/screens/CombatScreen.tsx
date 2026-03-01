@@ -24,6 +24,8 @@ import { DamageNumber } from "../combat/DamageNumber.js";
 import { FlashcardFace } from "../review/FlashcardFace.js";
 import { useGameTheme } from "../app/ThemeProvider.js";
 import { ReflectionScreen } from "../review/ReflectionScreen.js";
+import { selectLore } from "../../core/narrative/LoreFragments.js";
+import type { LoreFragment } from "../../core/narrative/LoreFragments.js";
 import { getDatabase } from "../../data/database.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
 import { CardRepository } from "../../data/repositories/CardRepository.js";
@@ -56,6 +58,8 @@ interface Props {
   retrievalMode?: RetrievalMode;
   startingHpOverride?: number;
   isDungeonFloor?: boolean;
+  seenLoreIds?: Set<number>;
+  onLoreSeen?: (id: number) => void;
   onRetreat?: () => void;
   onComplete: (result: CombatResult) => void;
 }
@@ -70,6 +74,8 @@ export function CombatScreen({
   retrievalMode,
   startingHpOverride,
   isDungeonFloor,
+  seenLoreIds,
+  onLoreSeen,
   onRetreat,
   onComplete,
 }: Props) {
@@ -134,6 +140,9 @@ export function CombatScreen({
   } | null>(null);
   const [undoUsed, setUndoUsed] = useState(false);
   const [undoMsg, setUndoMsg] = useState<string | null>(null);
+
+  // Lore fragment shown on defeat
+  const [defeatLore, setDefeatLore] = useState<LoreFragment | null>(null);
 
   // Look up evolution tiers for all cards
   const cardTiers = useMemo(() => {
@@ -305,10 +314,16 @@ export function CombatScreen({
         setLoot(droppedLoot);
       } else {
         setRewards({ xp: 0, gold: 0 });
+        // Select a lore fragment for defeat
+        const lore = selectLore(enemy.tier, seenLoreIds ?? new Set());
+        setDefeatLore(lore);
+        if (onLoreSeen) {
+          onLoreSeen(lore.id);
+        }
       }
       setPhase("result");
     },
-    [combat, enemy, streakBonusPct, stats.xpBonusPct, stats.goldBonusPct, parsedEffects],
+    [combat, enemy, streakBonusPct, stats.xpBonusPct, stats.goldBonusPct, parsedEffects, seenLoreIds, onLoreSeen],
   );
 
   // -- Handle answer submission in card phase --
@@ -700,9 +715,17 @@ export function CombatScreen({
               </Text>
             </>
           ) : (
-            <Text bold color={theme.colors.damage}>
-              Defeat...
-            </Text>
+            <>
+              <Text bold color={theme.colors.damage}>
+                Defeat...
+              </Text>
+              <Text dimColor>
+                You fell, but strengthened {combat.currentCardIndex} memory {combat.currentCardIndex === 1 ? "trace" : "traces"}
+              </Text>
+              {defeatLore && (
+                <LoreReveal lore={defeatLore} />
+              )}
+            </>
           )}
           <Box marginTop={1} flexDirection="column">
             <Text dimColor>
@@ -806,6 +829,26 @@ export function CombatScreen({
       {/* Bottom: Combat log */}
       <Box marginTop={1}>
         <CombatLog events={combat.events} />
+      </Box>
+    </Box>
+  );
+}
+
+function LoreReveal({ lore }: { lore: LoreFragment }) {
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="single"
+      borderColor="gray"
+      paddingX={1}
+      paddingY={1}
+      marginTop={1}
+    >
+      <Text dimColor italic>
+        ...a memory surfaces as consciousness fades...
+      </Text>
+      <Box marginTop={1}>
+        <Text italic>{lore.text}</Text>
       </Box>
     </Box>
   );
