@@ -282,4 +282,8 @@ const migrations = [
       );
     `,
   },
+  {
+    name: "014_attempts_composite_index",
+    sql: `CREATE INDEX IF NOT EXISTS idx_attempts_card_ts ON recall_attempts(card_id, timestamp);`,
+  },
 ];
