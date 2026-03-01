@@ -286,4 +286,8 @@ const migrations = [
     name: "014_attempts_composite_index",
     sql: `CREATE INDEX IF NOT EXISTS idx_attempts_card_ts ON recall_attempts(card_id, timestamp);`,
   },
+  {
+    name: "015_due_cards_covering_index",
+    sql: `CREATE INDEX IF NOT EXISTS idx_stats_due_cards ON recall_stats(suspended, buried_until, next_review_at, card_state);`,
+  },
 ];
