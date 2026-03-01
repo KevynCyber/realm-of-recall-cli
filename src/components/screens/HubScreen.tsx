@@ -19,6 +19,7 @@ const MENU_ITEMS = [
   { key: "7", label: "Achievements", description: "Track your accomplishments", screen: "achievements" },
   { key: "8", label: "Stats", description: "View your statistics", screen: "stats" },
   { key: "9", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
+  { key: "0", label: "Create Cards", description: "Author new flashcards", screen: "create_cards" },
 ] as const;
 
 export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, onNavigate }: Props) {

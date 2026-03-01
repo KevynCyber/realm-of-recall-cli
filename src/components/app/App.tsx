@@ -11,6 +11,7 @@ import { InventoryScreen } from "../screens/InventoryScreen.js";
 import { MapScreen } from "../screens/MapScreen.js";
 import { StatsScreen } from "../screens/StatsScreen.js";
 import { DeckScreen } from "../screens/DeckScreen.js";
+import { CardCreatorScreen } from "../screens/CardCreatorScreen.js";
 import { AchievementScreen } from "../screens/AchievementScreen.js";
 import { DailyChallengeScreen } from "../screens/DailyChallengeScreen.js";
 import { DungeonRunScreen } from "../screens/DungeonRunScreen.js";
@@ -96,7 +97,7 @@ import type {
   Zone,
   ScheduleData,
 } from "../../types/index.js";
-import { AnswerQuality, PlayerClass, RetrievalMode } from "../../types/index.js";
+import { AnswerQuality, CardType, PlayerClass, RetrievalMode } from "../../types/index.js";
 import type { CombatResult } from "../../types/combat.js";
 import type { Enemy } from "../../types/combat.js";
 import type { TrendResult } from "../../core/analytics/MarginalGains.js";
@@ -116,7 +117,8 @@ export type Screen =
   | "achievements"
   | "daily_challenge"
   | "dungeon"
-  | "random_event";
+  | "random_event"
+  | "create_cards";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -173,6 +175,7 @@ export default function App() {
   const [deckData, setDeckData] = useState<
     Array<{ deck: Deck; cardCount: number; dueCount: number; suspendedCount: number }>
   >([]);
+  const [cardCreatorDecks, setCardCreatorDecks] = useState<Deck[]>([]);
   const [reviewResults, setReviewResults] = useState<ReviewResult[]>([]);
   const [reviewXp, setReviewXp] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
@@ -623,6 +626,17 @@ export default function App() {
           setScreen("dungeon");
           break;
         }
+        case "create_cards": {
+          try {
+            const db = getDatabase();
+            const cardRepo = new CardRepository(db);
+            setCardCreatorDecks(cardRepo.getAllDecks());
+            setScreen("create_cards");
+          } catch {
+            // ignore
+          }
+          break;
+        }
         case "import": {
           // Import is CLI-only (ror import <file>)
           break;
@@ -1065,7 +1079,8 @@ export default function App() {
       screen === "review" ||
       screen === "reflection" ||
       screen === "dungeon" ||
-      screen === "random_event"
+      screen === "random_event" ||
+      screen === "create_cards"
     )
       return;
     if (input === "q") {
@@ -1358,6 +1373,52 @@ export default function App() {
             }}
           />
         ) : null;
+      case "create_cards":
+        return (
+          <CardCreatorScreen
+            decks={cardCreatorDecks}
+            onCreateCard={(cardData) => {
+              try {
+                const db = getDatabase();
+                const cardRepo = new CardRepository(db);
+                const cardId = `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                cardRepo.insertCard({
+                  id: cardId,
+                  front: cardData.front,
+                  back: cardData.back,
+                  acceptableAnswers: cardData.acceptableAnswers,
+                  type: cardData.isCloze ? CardType.ClozeDeletion : CardType.Basic,
+                  deckId: cardData.deckId,
+                });
+                refreshCardsDue();
+              } catch {
+                // ignore
+              }
+            }}
+            onCreateDeck={(name) => {
+              const deckId = `deck-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              try {
+                const db = getDatabase();
+                const cardRepo = new CardRepository(db);
+                cardRepo.createDeck({
+                  id: deckId,
+                  name,
+                  description: "",
+                  createdAt: new Date().toISOString(),
+                  equipped: true,
+                });
+                setCardCreatorDecks(cardRepo.getAllDecks());
+              } catch {
+                // ignore
+              }
+              return deckId;
+            }}
+            onBack={() => {
+              refreshCardsDue();
+              setScreen("hub");
+            }}
+          />
+        );
       default:
         return <Text>Unknown screen</Text>;
     }
