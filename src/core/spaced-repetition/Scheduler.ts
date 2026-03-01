@@ -12,6 +12,7 @@ import {
   ConfidenceLevel,
   type ScheduleData,
 } from "../../types/index.js";
+import { hasPerk } from "../progression/WisdomPerks.js";
 
 /**
  * FSRS spaced repetition scheduler.
@@ -86,12 +87,13 @@ function getFsrsInstance(desiredRetention?: number): ReturnType<typeof fsrs> {
   return instance;
 }
 
-export function createInitialSchedule(cardId: string): ScheduleData {
+export function createInitialSchedule(cardId: string, wisdomXp?: number): ScheduleData {
   const now = new Date();
+  const stability = wisdomXp !== undefined && hasPerk(wisdomXp, "quick_learner") ? 1.1 : 0;
   return {
     cardId,
     difficulty: 0,
-    stability: 0,
+    stability,
     reps: 0,
     lapses: 0,
     state: "new",

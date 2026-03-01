@@ -299,7 +299,7 @@
         "Tests pass"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Wisdom XP is tracked and awarded but has zero gameplay impact beyond 1 achievement at 500."
     },
     {
