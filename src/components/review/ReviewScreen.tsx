@@ -13,6 +13,8 @@ import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import { getDatabase } from "../../data/database.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
+import { getCardHealth } from "../../core/cards/CardEvolution.js";
+import type { CardHealthStatus } from "../../core/cards/CardEvolution.js";
 
 export interface ReviewResult {
   cardId: string;
@@ -65,6 +67,22 @@ export function ReviewScreen({
       return tiers;
     } catch {
       return new Map<string, number>();
+    }
+  }, [cards]);
+
+  // Look up card health status for all cards
+  const cardHealthMap = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const healthMap = new Map<string, CardHealthStatus>();
+      for (const c of cards) {
+        const { recentQualities, totalLapses } = statsRepo.getCardHealthData(c.id);
+        healthMap.set(c.id, getCardHealth(recentQualities, totalLapses));
+      }
+      return healthMap;
+    } catch {
+      return new Map<string, CardHealthStatus>();
     }
   }, [cards]);
 
@@ -301,6 +319,7 @@ export function ReviewScreen({
             phase === "confidence"
           }
           evolutionTier={cardTiers.get(card.id) ?? 0}
+          cardHealth={cardHealthMap.get(card.id) ?? "healthy"}
         />
       )}
 

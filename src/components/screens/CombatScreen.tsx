@@ -24,7 +24,8 @@ import { useGameTheme } from "../app/ThemeProvider.js";
 import { ReflectionScreen } from "../review/ReflectionScreen.js";
 import { getDatabase } from "../../data/database.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
-import type { EvolutionTier } from "../../core/cards/CardEvolution.js";
+import type { EvolutionTier, CardHealthStatus } from "../../core/cards/CardEvolution.js";
+import { getCardHealth } from "../../core/cards/CardEvolution.js";
 import {
   selectPrompt,
   shouldShowJournal,
@@ -102,8 +103,25 @@ export function CombatScreen({
     }
   }, [cards]);
 
+  // Look up card health status for all cards
+  const cardHealthMap = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const healthMap = new Map<string, CardHealthStatus>();
+      for (const c of cards) {
+        const { recentQualities, totalLapses } = statsRepo.getCardHealthData(c.id);
+        healthMap.set(c.id, getCardHealth(recentQualities, totalLapses));
+      }
+      return healthMap;
+    } catch {
+      return new Map<string, CardHealthStatus>();
+    }
+  }, [cards]);
+
   const currentCard = cards[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
+  const currentHealth = currentCard ? (cardHealthMap.get(currentCard.id) ?? "healthy") : "healthy";
   const totalTime = 30; // seconds per card
 
   // -- Intro phase: show enemy appearance message, then transition to card --
@@ -507,7 +525,7 @@ export function CombatScreen({
       {/* Middle: Card content */}
       {phase === "card" && currentCard && (
         <>
-          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} />
+          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} />
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
