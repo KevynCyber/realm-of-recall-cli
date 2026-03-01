@@ -11,6 +11,7 @@ import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { generateHint, getMaxHintLevel, isFullReveal, generatePartialCue } from "../../core/cards/HintGenerator.js";
 import { getLearningProgress, isOverlearning, shouldRequeueCard, OVERLEARNING_MESSAGE } from "../../core/review/LearningGate.js";
+import { isPretestEligible, getPretestRevealMessage } from "../../core/review/Pretesting.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import { getDatabase } from "../../data/database.js";
@@ -35,7 +36,7 @@ interface Props {
   timerSeconds?: number;
 }
 
-type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate" | "elaboration";
+type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate" | "elaboration" | "pretest" | "pretest_reveal";
 
 /** Exported for testing — override in tests via dependency injection. */
 export let _rollElaboration = (): boolean => Math.random() < 0.3;
@@ -119,6 +120,22 @@ export function ReviewScreen({
     }
   }, [cards]);
 
+  // Look up card FSRS states for pretesting eligibility
+  const cardStates = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const states = new Map<string, string | null>();
+      for (const c of cards) {
+        const schedule = statsRepo.getSchedule(c.id);
+        states.set(c.id, schedule?.state ?? null);
+      }
+      return states;
+    } catch {
+      return new Map<string, string | null>();
+    }
+  }, [cards]);
+
   // Successive relearning: mutable card queue and re-queue tracking
   const MAX_REQUEUES = 2;
   const [cardQueue, setCardQueue] = useState<Card[]>(() => [...cards]);
@@ -126,7 +143,14 @@ export function ReviewScreen({
     () => new Map(),
   );
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>("question");
+  const [phase, setPhase] = useState<Phase>(() => {
+    const firstCard = cards[0];
+    if (firstCard) {
+      const firstState = cardStates.get(firstCard.id) ?? null;
+      if (isPretestEligible(firstState)) return "pretest";
+    }
+    return "question";
+  });
   const [input, setInput] = useState("");
   const [lastQuality, setLastQuality] = useState<AnswerQuality | null>(null);
   const [results, setResults] = useState<ReviewResult[]>([]);
@@ -148,6 +172,10 @@ export function ReviewScreen({
   const [elaborationInput, setElaborationInput] = useState("");
   // Learning gate: per-card consecutive correct counts within this session
   const [sessionCorrectCounts, setSessionCorrectCounts] = useState<Map<string, number>>(() => new Map());
+  // Pretesting state
+  const [pretestedCards, setPretestedCards] = useState<Set<string>>(() => new Set());
+  const [pretestInput, setPretestInput] = useState("");
+  const [pretestRevealMsg, setPretestRevealMsg] = useState<string>("");
 
   const card = cardQueue[currentIndex];
   const totalTime = timerSecondsProp === 0 ? Infinity : timerSecondsProp; // 0 = disabled
@@ -228,8 +256,11 @@ export function ReviewScreen({
         return updated;
       });
       if (currentIndex + 1 < cardQueue.length) {
+        const nextCard = cardQueue[currentIndex + 1];
+        const nextState = nextCard ? (cardStates.get(nextCard.id) ?? null) : null;
+        const shouldPretest = nextCard && isPretestEligible(nextState, pretestedCards.has(nextCard.id));
         setCurrentIndex((i) => i + 1);
-        setPhase("question");
+        setPhase(shouldPretest ? "pretest" : "question");
         setInput("");
         setLastQuality(null);
         setCardStart(Date.now());
@@ -239,6 +270,8 @@ export function ReviewScreen({
         setUndoUsed(false);
         setElaborationInput("");
         setElaborationPrompt("");
+        setPretestInput("");
+        setPretestRevealMsg("");
       }
     },
     [cardQueue.length, currentIndex, onComplete, card, lastQuality, requeueCard],
@@ -292,7 +325,38 @@ export function ReviewScreen({
     [card, cardStart, mode],
   );
 
+  // Pretest mode: user submits their attempt at new card
+  const handlePretestSubmit = useCallback(
+    (answer: string) => {
+      if (!effectiveCard) return;
+      const isCorrect = evaluateAnswer(effectiveCard, answer, 0, Infinity) === AnswerQuality.Perfect ||
+        evaluateAnswer(effectiveCard, answer, 0, Infinity) === AnswerQuality.Correct;
+      const msg = getPretestRevealMessage(effectiveCard.back, isCorrect);
+      setPretestRevealMsg(msg);
+      setPretestedCards((prev) => {
+        const next = new Set(prev);
+        next.add(card.id);
+        return next;
+      });
+      setPhase("pretest_reveal");
+    },
+    [effectiveCard, card],
+  );
+
   // ----------------------------------------------------------------- useInput hooks
+
+  // Pretest reveal phase — press Enter to proceed to normal question
+  useInput(
+    (_input, key) => {
+      if (key.return || _input === " ") {
+        setPhase("question");
+        setInput("");
+        setCardStart(Date.now());
+        setPretestInput("");
+      }
+    },
+    { isActive: phase === "pretest_reveal" },
+  );
 
   // Feedback phase — press Enter to continue (only for wrong/timeout/partial in standard modes)
   useInput(
@@ -523,13 +587,34 @@ export function ReviewScreen({
           showAnswer={
             phase === "feedback" ||
             phase === "confidence" ||
-            phase === "elaboration"
+            phase === "elaboration" ||
+            phase === "pretest_reveal"
           }
           evolutionTier={cardTiers.get(card.id) ?? 0}
           cardHealth={cardHealthMap.get(card.id) ?? "healthy"}
           isRetry={(requeueCounts.get(card.id) ?? 0) > 0 && currentIndex >= cards.length}
           variant={(cardVariants.get(card.id) ?? null) as any}
         />
+      )}
+
+      {/* Pretest phase — attempt answer before learning */}
+      {phase === "pretest" && effectiveCard && (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold color="magenta">{"Scout's Challenge: Try answering before learning!"}</Text>
+          <Box>
+            <Text bold>Your guess: </Text>
+            <TextInput value={pretestInput} onChange={setPretestInput} onSubmit={handlePretestSubmit} />
+          </Box>
+          <Text dimColor italic>{"Don't worry — this won't count against you."}</Text>
+        </Box>
+      )}
+
+      {/* Pretest reveal — show result and correct answer */}
+      {phase === "pretest_reveal" && (
+        <Box marginTop={1} flexDirection="column">
+          <Text bold color="cyan">{pretestRevealMsg}</Text>
+          <Text dimColor italic>Press Enter to continue to review...</Text>
+        </Box>
       )}
 
       {/* Teach mode: question phase — prompt for explanation */}
