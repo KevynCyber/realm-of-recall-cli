@@ -118,6 +118,15 @@ export class CardRepository {
     return rows.map(this.rowToCard);
   }
 
+  getCardsByIds(ids: string[]): Card[] {
+    if (ids.length === 0) return [];
+    const placeholders = ids.map(() => "?").join(",");
+    const rows = this.db
+      .prepare(`SELECT * FROM cards WHERE id IN (${placeholders})`)
+      .all(...ids) as any[];
+    return rows.map(this.rowToCard);
+  }
+
   private rowToCard(row: any): Card {
     return {
       id: row.id,

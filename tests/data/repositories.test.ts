@@ -91,6 +91,31 @@ describe("CardRepository", () => {
     expect(cardRepo.getCard("card1")).toBeUndefined();
   });
 
+  describe("getCardsByIds", () => {
+    it("returns cards matching the given IDs", () => {
+      const cards: Card[] = [
+        { ...testCard, id: "a1" },
+        { ...testCard, id: "a2" },
+        { ...testCard, id: "a3" },
+      ];
+      cardRepo.insertCards(cards);
+      const result = cardRepo.getCardsByIds(["a1", "a3"]);
+      expect(result).toHaveLength(2);
+      expect(result.map((c) => c.id).sort()).toEqual(["a1", "a3"]);
+    });
+
+    it("returns empty array for empty input", () => {
+      expect(cardRepo.getCardsByIds([])).toEqual([]);
+    });
+
+    it("skips non-existent IDs", () => {
+      cardRepo.insertCard(testCard);
+      const result = cardRepo.getCardsByIds(["card1", "nonexistent"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("card1");
+    });
+  });
+
   describe("equipped deck management", () => {
     it("returns equipped deck IDs", () => {
       const ids = cardRepo.getEquippedDeckIds();

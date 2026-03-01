@@ -496,18 +496,14 @@ export default function App() {
         if (deckId) {
           // Zone-specific combat: pull from single deck with new card limit
           const { cardIds } = statsRepo.getDueCardsWithNewLimit(deckId, maxNew, 10);
-          cards = cardIds
-            .map((id) => cardRepo.getCard(id))
-            .filter((c): c is Card => c !== undefined);
+          cards = cardRepo.getCardsByIds(cardIds);
         } else {
           // Hub combat: interleave across equipped decks with new card limit
           const equippedDeckIds = cardRepo.getEquippedDeckIds();
           const cardsByDeck = new Map<string, Card[]>();
           for (const did of equippedDeckIds) {
             const { cardIds } = statsRepo.getDueCardsWithNewLimit(did, maxNew, 20);
-            const deckCards = cardIds
-              .map((id) => cardRepo.getCard(id))
-              .filter((c): c is Card => c !== undefined);
+            const deckCards = cardRepo.getCardsByIds(cardIds);
             if (deckCards.length > 0) {
               cardsByDeck.set(did, deckCards);
             }
@@ -563,9 +559,7 @@ export default function App() {
             const equippedIds = cardRepo.getEquippedDeckIds();
             const maxNew = player?.maxNewCardsPerDay ?? 20;
             const { cardIds: dueIds } = statsRepo.getDueCardsWithNewLimit(equippedIds, maxNew, 20);
-            const cards = dueIds
-              .map((id) => cardRepo.getCard(id))
-              .filter((c): c is Card => c !== undefined);
+            const cards = cardRepo.getCardsByIds(dueIds);
             if (cards.length === 0) break;
             // Select retrieval mode for this review session (gated by meta-progression unlocks)
             const cardState = getMajorityCardState(cards, statsRepo);
@@ -1132,9 +1126,7 @@ export default function App() {
         const db = getDatabase();
         const cardRepo = new CardRepository(db);
         const selectedIds = getBacklogSessionCardIds(option, backlogOverdueCardIds);
-        const cards = selectedIds
-          .map((id) => cardRepo.getCard(id))
-          .filter((c): c is Card => c !== undefined);
+        const cards = cardRepo.getCardsByIds(selectedIds);
         if (cards.length === 0) {
           setScreen("hub");
           return;
@@ -1560,9 +1552,7 @@ export default function App() {
               try {
                 const db = getDatabase();
                 const cardRepo = new CardRepository(db);
-                const cards = dailyChallengeConfig.cardIds
-                  .map((id) => cardRepo.getCard(id))
-                  .filter((c): c is Card => c !== undefined);
+                const cards = cardRepo.getCardsByIds(dailyChallengeConfig.cardIds);
                 if (cards.length === 0) return;
                 setCombatCards(cards);
                 setCombatEnemy(dailyChallengeConfig.enemy);
