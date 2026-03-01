@@ -39,6 +39,7 @@ import {
   tickCooldowns,
 } from "../../core/player/ClassAbilities.js";
 import type { ClassAbility, ActiveAbility, AbilityEffect } from "../../core/player/ClassAbilities.js";
+import type { CombatSettings } from "../../core/progression/AscensionSystem.js";
 
 type Phase = "intro" | "card" | "resolve" | "result" | "reflection" | "ability_menu";
 
@@ -48,6 +49,7 @@ interface Props {
   player: Player;
   equippedItems: Equipment[];
   streakBonusPct: number;
+  combatSettings?: CombatSettings;
   onComplete: (result: CombatResult) => void;
 }
 
@@ -57,15 +59,26 @@ export function CombatScreen({
   player,
   equippedItems,
   streakBonusPct,
+  combatSettings,
   onComplete,
 }: Props) {
   const theme = useGameTheme();
   const stats = getEffectiveStats(player, equippedItems);
 
   const [phase, setPhase] = useState<Phase>("intro");
-  const [combat, setCombat] = useState<CombatState>(() =>
-    createCombatState(enemy, stats.maxHp, player.hp, cards.length),
-  );
+  const [combat, setCombat] = useState<CombatState>(() => {
+    // Apply startingHpPercent from ascension settings
+    const startHpPct = combatSettings?.startingHpPercent ?? 100;
+    const startingHp = startHpPct < 100
+      ? Math.max(1, Math.floor(player.hp * (startHpPct / 100)))
+      : player.hp;
+    const state = createCombatState(enemy, stats.maxHp, startingHp, cards.length);
+    // Apply ascension poison damage per turn
+    if (combatSettings?.enemyPoisonDamage && combatSettings.enemyPoisonDamage > 0) {
+      state.poisonDamage = combatSettings.enemyPoisonDamage;
+    }
+    return state;
+  });
   const [input, setInput] = useState("");
   const [cardStart, setCardStart] = useState(Date.now());
   const [lastQuality, setLastQuality] = useState<AnswerQuality | null>(null);
@@ -122,7 +135,7 @@ export function CombatScreen({
   const currentCard = cards[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
   const currentHealth = currentCard ? (cardHealthMap.get(currentCard.id) ?? "healthy") : "healthy";
-  const totalTime = 30; // seconds per card
+  const totalTime = combatSettings?.timerSeconds ?? 30; // seconds per card
 
   // -- Intro phase: show enemy appearance message, then transition to card --
   useEffect(() => {
@@ -182,7 +195,11 @@ export function CombatScreen({
     (answer: string) => {
       if (!currentCard) return;
       const responseTime = (Date.now() - cardStart) / 1000;
-      const quality = evaluateAnswer(currentCard, answer, responseTime, totalTime);
+      let quality = evaluateAnswer(currentCard, answer, responseTime, totalTime);
+      // Ascension: treat Partial as Wrong when partial credit is disabled
+      if (quality === AnswerQuality.Partial && combatSettings?.partialCreditEnabled === false) {
+        quality = AnswerQuality.Wrong;
+      }
       setLastQuality(quality);
 
       // Apply active effects to attack power
@@ -223,6 +240,11 @@ export function CombatScreen({
         ? { ...newState, playerHp: combat.playerHp }
         : newState;
 
+      // Re-apply ascension poison damage for next turn
+      if (combatSettings?.enemyPoisonDamage && combatSettings.enemyPoisonDamage > 0) {
+        finalState.poisonDamage = combatSettings.enemyPoisonDamage;
+      }
+
       setCombat(finalState);
 
       // Tick cooldowns after each answer
@@ -243,7 +265,7 @@ export function CombatScreen({
 
       setPhase("resolve");
     },
-    [currentCard, cardStart, combat, stats, activeEffects, currentTier],
+    [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings],
   );
 
   // -- Handle [A] key to open ability menu during card phase --

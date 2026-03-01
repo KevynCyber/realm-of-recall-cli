@@ -54,9 +54,12 @@ import type { AchievementState } from "../../core/progression/Achievements.js";
 import { interleaveCards } from "../../core/review/Interleaver.js";
 import {
   applyAscensionToEnemy,
+  applyAscensionToCombat,
+  getDefaultCombatSettings,
   getActiveModifiers,
   canUnlockNextAscension,
 } from "../../core/progression/AscensionSystem.js";
+import type { CombatSettings } from "../../core/progression/AscensionSystem.js";
 import {
   getDailySeed,
   generateDailyChallenge,
@@ -122,6 +125,7 @@ export default function App() {
   // Screen-specific data
   const [combatCards, setCombatCards] = useState<Card[]>([]);
   const [combatEnemy, setCombatEnemy] = useState<Enemy | null>(null);
+  const [combatSettings, setCombatSettings] = useState<CombatSettings>(getDefaultCombatSettings());
   const [equippedItems, setEquippedItems] = useState<Equipment[]>([]);
   const [inventoryData, setInventoryData] = useState<
     Array<{ equipment: Equipment; equipped: boolean; inventoryId: number }>
@@ -328,9 +332,13 @@ export default function App() {
           enemy = applyAscensionToEnemy(enemy, player.ascensionLevel);
         }
 
+        // Apply ascension modifiers to combat settings
+        const settings = applyAscensionToCombat(getDefaultCombatSettings(), player.ascensionLevel);
+
         const equipped = equipRepo.getEquipped();
         setCombatCards(cards);
         setCombatEnemy(enemy);
+        setCombatSettings(settings);
         setEquippedItems(equipped);
         return true;
       } catch {
@@ -916,6 +924,7 @@ export default function App() {
             player={player}
             equippedItems={equippedItems}
             streakBonusPct={streakBonusPct}
+            combatSettings={combatSettings}
             onComplete={handleCombatComplete}
           />
         ) : (
