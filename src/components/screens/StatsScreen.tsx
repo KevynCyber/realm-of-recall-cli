@@ -6,6 +6,8 @@ import { xpToNextLevel } from "../../core/progression/XPCalculator.js";
 import { getStreakBonus, getStreakTitle } from "../../core/progression/StreakTracker.js";
 import type { TrendResult } from "../../core/analytics/MarginalGains.js";
 import { getUnlockedPerks, WISDOM_PERKS } from "../../core/progression/WisdomPerks.js";
+import { getAllUnlocks } from "../../core/progression/MetaUnlocks.js";
+import type { MetaUnlock } from "../../core/progression/MetaUnlocks.js";
 
 interface DeckStat {
   name: string;
@@ -50,6 +52,7 @@ interface Props {
   consistencyGrid?: string;
   wisdomXp?: number;
   variantCounts?: VariantCounts;
+  unlockedKeys?: Set<string>;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -78,6 +81,7 @@ export function StatsScreen({
   consistencyGrid,
   wisdomXp,
   variantCounts,
+  unlockedKeys,
 }: Props) {
   const theme = useGameTheme();
   const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer">("retention");
@@ -295,6 +299,28 @@ export function StatsScreen({
               </>
             );
           })()}
+        </Box>
+      )}
+
+      {/* Section — Meta-Progression */}
+      {unlockedKeys !== undefined && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.rare}>
+            Meta-Progression
+          </Text>
+          {getAllUnlocks().map((unlock: MetaUnlock) => {
+            const isUnlocked = unlockedKeys.has(unlock.key);
+            return (
+              <Text key={unlock.key}>
+                <Text color={isUnlocked ? theme.colors.success : theme.colors.muted}>
+                  {isUnlocked ? "\u2713" : "\u2717"} {unlock.name}
+                </Text>
+                <Text color={theme.colors.muted}>
+                  {" "}(Ascension {unlock.requiredAscension})
+                </Text>
+              </Text>
+            );
+          })}
         </Box>
       )}
 

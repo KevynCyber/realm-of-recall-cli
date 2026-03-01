@@ -252,6 +252,10 @@ export default function App() {
   // Idle progression banner
   const [idleBanner, setIdleBanner] = useState<string | null>(null);
 
+  // Meta-progression unlock state
+  const [unlockedKeys, setUnlockedKeys] = useState<Set<string>>(new Set());
+  const [newUnlockName, setNewUnlockName] = useState<string | null>(null);
+
   // Marginal gains data for stats screen
   const [accuracyTrend, setAccuracyTrend] = useState<TrendResult | undefined>(
     undefined,
@@ -354,6 +358,11 @@ export default function App() {
           playerRepo.updatePlayer(p);
         }
         setPlayer(p);
+
+        // Load meta-progression unlocks
+        const unlockRepo = new UnlockRepository(db);
+        setUnlockedKeys(unlockRepo.getUnlockedKeys());
+
         const cardRepo = new CardRepository(db);
         const statsRepo = new StatsRepository(db);
         const equippedIds = cardRepo.getEquippedDeckIds();
@@ -494,8 +503,8 @@ export default function App() {
         baseSettings.timerSeconds = player.timerSeconds;
         const settings = applyAscensionToCombat(baseSettings, player.ascensionLevel);
 
-        // Select retrieval mode for combat
-        const mode = selectMode("review", [], sessionModes);
+        // Select retrieval mode for combat (gated by meta-progression unlocks)
+        const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
         setCurrentRetrievalMode(mode);
         setSessionModes((prev) => [...prev, mode]);
 
@@ -509,7 +518,7 @@ export default function App() {
         return false;
       }
     },
-    [player, sessionModes],
+    [player, sessionModes, unlockedKeys],
   );
 
   const navigateToScreen = useCallback(
@@ -533,8 +542,8 @@ export default function App() {
               .map((id) => cardRepo.getCard(id))
               .filter((c): c is Card => c !== undefined);
             if (cards.length === 0) break;
-            // Select retrieval mode for this review session
-            const mode = selectMode("review", [], sessionModes);
+            // Select retrieval mode for this review session (gated by meta-progression unlocks)
+            const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
             setCurrentRetrievalMode(mode);
             setSessionModes((prev) => [...prev, mode]);
             setCombatCards(cards);
@@ -724,7 +733,7 @@ export default function App() {
         case "dungeon": {
           if (!player) break;
           // Initialize a fresh dungeon run state when entering from hub
-          setDungeonRunState(createDungeonRun(player.hp, player.maxHp));
+          setDungeonRunState(createDungeonRun(player.hp, player.maxHp, unlockedKeys.has("extended_dungeon")));
           setDungeonFloorCombatResult(null);
           setScreen("dungeon");
           break;
@@ -748,7 +757,7 @@ export default function App() {
           setScreen(target as Screen);
       }
     },
-    [player, prepareCombat],
+    [player, prepareCombat, unlockedKeys, sessionModes],
   );
 
   const handleCombatComplete = useCallback(
@@ -860,6 +869,8 @@ export default function App() {
             const variant = tryAwardVariant(
               newConsecutive,
               currentVariant as any,
+              Math.random,
+              unlockedKeys.has("prismatic_variants"),
             );
             if (variant) {
               statsRepo.awardVariant(card.id, variant);
@@ -922,7 +933,7 @@ export default function App() {
         }
       }
     },
-    [player, combatCards, refreshCardsDue, checkAchievements, isDungeonFloor],
+    [player, combatCards, refreshCardsDue, checkAchievements, isDungeonFloor, unlockedKeys],
   );
 
   const handleReviewComplete = useCallback(
@@ -1021,6 +1032,8 @@ export default function App() {
             const variant = tryAwardVariant(
               newConsecutive,
               currentVariant as any,
+              Math.random,
+              unlockedKeys.has("prismatic_variants"),
             );
             if (variant) {
               statsRepo.awardVariant(result.cardId, variant);
@@ -1087,7 +1100,7 @@ export default function App() {
         setScreen("hub");
       }
     },
-    [player, refreshCardsDue],
+    [player, refreshCardsDue, unlockedKeys],
   );
 
   const handleWelcomeBackSelect = useCallback(
@@ -1103,8 +1116,8 @@ export default function App() {
           setScreen("hub");
           return;
         }
-        // Select retrieval mode for the catch-up review session
-        const mode = selectMode("review", [], sessionModes);
+        // Select retrieval mode for the catch-up review session (gated by meta-progression unlocks)
+        const mode = selectMode("review", [], sessionModes, Math.random, unlockedKeys);
         setCurrentRetrievalMode(mode);
         setSessionModes((prev) => [...prev, mode]);
         setCombatCards(cards);
@@ -1114,7 +1127,7 @@ export default function App() {
         setScreen("hub");
       }
     },
-    [backlogOverdueCardIds, sessionModes],
+    [backlogOverdueCardIds, sessionModes, unlockedKeys],
   );
 
   const handleReflectionComplete = useCallback(
@@ -1308,7 +1321,11 @@ export default function App() {
             streakAtRisk={streakAtRisk}
             newCardsRemaining={newCardsRemaining}
             idleBanner={idleBanner}
-            onNavigate={navigateToScreen}
+            newUnlockName={newUnlockName}
+            onNavigate={(target) => {
+              setNewUnlockName(null);
+              navigateToScreen(target);
+            }}
           />
         );
       case "welcome_back":
@@ -1416,9 +1433,18 @@ export default function App() {
 
                 // Award any newly earned meta-progression unlocks
                 const unlockRepo = new UnlockRepository(db);
+                const previousKeys = unlockRepo.getUnlockedKeys();
                 const earned = getUnlocksForAscension(updated.ascensionLevel);
                 for (const unlock of earned) {
                   unlockRepo.unlock(unlock.key);
+                }
+                const updatedKeys = unlockRepo.getUnlockedKeys();
+                setUnlockedKeys(updatedKeys);
+
+                // Show notification for freshly unlocked items
+                const freshUnlocks = earned.filter((u) => !previousKeys.has(u.key));
+                if (freshUnlocks.length > 0) {
+                  setNewUnlockName(freshUnlocks.map((u) => u.name).join(", "));
                 }
               } catch {
                 // ignore
@@ -1488,6 +1514,7 @@ export default function App() {
                 return undefined;
               }
             })()}
+            unlockedKeys={unlockedKeys}
           />
         ) : null;
       case "achievements":
@@ -1545,8 +1572,9 @@ export default function App() {
             onFloorCombat={(floorNumber: number) => {
               if (!player) return;
               // Build a temporary run state to get the floor config
-              const tempRun = { ...(dungeonRunState ?? createDungeonRun(player.hp, player.maxHp)), currentFloor: floorNumber };
-              const floorConfig = getCurrentFloorConfig(tempRun);
+              const isExtended = unlockedKeys.has("extended_dungeon");
+              const tempRun = { ...(dungeonRunState ?? createDungeonRun(player.hp, player.maxHp, isExtended)), currentFloor: floorNumber };
+              const floorConfig = getCurrentFloorConfig(tempRun, isExtended);
 
               // Use dungeon run HP for combat starting HP
               const dungeonHp = dungeonRunState?.playerHp ?? player.hp;

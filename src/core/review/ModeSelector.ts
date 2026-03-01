@@ -16,6 +16,16 @@ export const MODE_WEIGHTS: ModeWeight[] = [
 ];
 
 /**
+ * Map from retrieval mode to the unlock key that gates it.
+ * Standard is always available (no entry here).
+ */
+const MODE_UNLOCK_KEYS: Partial<Record<RetrievalMode, string>> = {
+  [RetrievalMode.Reversed]: "reversed_mode",
+  [RetrievalMode.Teach]: "teach_mode",
+  [RetrievalMode.Connect]: "connect_mode",
+};
+
+/**
  * Select a retrieval mode based on card state, recency, and session variety.
  *
  * - new / relearning cards always get Standard.
@@ -27,27 +37,39 @@ export const MODE_WEIGHTS: ModeWeight[] = [
  *
  * Session variety: if the last 3 entries in `sessionModes` are all the same
  * mode, that mode is excluded from this selection.
+ *
+ * @param unlockedKeys If provided, only modes whose unlock key is in this set
+ *   (or that have no unlock key, i.e. Standard) will be available.
  */
 export function selectMode(
   cardState: string,
   recentModesForCard: RetrievalMode[],
   sessionModes: RetrievalMode[],
   rng: () => number = Math.random,
+  unlockedKeys?: Set<string>,
 ): RetrievalMode {
   // New / relearning cards always use Standard
   if (cardState === "new" || cardState === "relearning") {
     return RetrievalMode.Standard;
   }
 
+  // Filter modes by meta-progression unlock state (Standard always available)
+  const availableWeights = unlockedKeys
+    ? MODE_WEIGHTS.filter((w) => {
+        const unlockKey = MODE_UNLOCK_KEYS[w.mode];
+        return !unlockKey || unlockedKeys.has(unlockKey);
+      })
+    : MODE_WEIGHTS;
+
   // Determine the allowed weight entries
   let pool: ModeWeight[];
   if (cardState === "learning") {
-    pool = MODE_WEIGHTS.filter(
+    pool = availableWeights.filter(
       (w) => w.mode === RetrievalMode.Standard || w.mode === RetrievalMode.Reversed,
     );
   } else {
     // review (and any unknown state) — full pool
-    pool = [...MODE_WEIGHTS];
+    pool = [...availableWeights];
   }
 
   // Session variety: exclude a mode if the last 3 session entries are identical
