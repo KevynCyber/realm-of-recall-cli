@@ -16,6 +16,7 @@ import { rollLoot } from "../../core/combat/LootTable.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { getEffectiveStats } from "../../core/player/PlayerStats.js";
 import { EnemyDisplay } from "../combat/EnemyDisplay.js";
+import { EncounterPreview } from "../combat/EncounterPreview.js";
 import { CombatLog } from "../combat/CombatLog.js";
 import { LootDrop } from "../combat/LootDrop.js";
 import { DamageNumber } from "../combat/DamageNumber.js";
@@ -24,6 +25,7 @@ import { useGameTheme } from "../app/ThemeProvider.js";
 import { ReflectionScreen } from "../review/ReflectionScreen.js";
 import { getDatabase } from "../../data/database.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
+import { CardRepository } from "../../data/repositories/CardRepository.js";
 import type { EvolutionTier, CardHealthStatus } from "../../core/cards/CardEvolution.js";
 import { getCardHealth } from "../../core/cards/CardEvolution.js";
 import {
@@ -41,7 +43,7 @@ import {
 import type { ClassAbility, ActiveAbility, AbilityEffect } from "../../core/player/ClassAbilities.js";
 import type { CombatSettings } from "../../core/progression/AscensionSystem.js";
 
-type Phase = "intro" | "card" | "resolve" | "result" | "reflection" | "ability_menu";
+type Phase = "encounter_preview" | "intro" | "card" | "resolve" | "result" | "reflection" | "ability_menu";
 
 interface Props {
   cards: Card[];
@@ -52,6 +54,8 @@ interface Props {
   combatSettings?: CombatSettings;
   retrievalMode?: RetrievalMode;
   startingHpOverride?: number;
+  isDungeonFloor?: boolean;
+  onRetreat?: () => void;
   onComplete: (result: CombatResult) => void;
 }
 
@@ -64,12 +68,14 @@ export function CombatScreen({
   combatSettings,
   retrievalMode,
   startingHpOverride,
+  isDungeonFloor,
+  onRetreat,
   onComplete,
 }: Props) {
   const theme = useGameTheme();
   const stats = getEffectiveStats(player, equippedItems);
 
-  const [phase, setPhase] = useState<Phase>("intro");
+  const [phase, setPhase] = useState<Phase>("encounter_preview");
   const [combat, setCombat] = useState<CombatState>(() => {
     // Use override HP (e.g., from dungeon floor) if provided, else use player HP
     const baseHp = startingHpOverride ?? player.hp;
@@ -157,6 +163,49 @@ export function CombatScreen({
       return new Map<string, CardHealthStatus>();
     }
   }, [cards]);
+
+  // Compute encounter preview data
+  const previewData = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const cardRepo = new CardRepository(db);
+
+      // Average card difficulty from due cards
+      let totalDifficulty = 0;
+      let difficultyCount = 0;
+      for (const c of cards) {
+        const schedule = statsRepo.getSchedule(c.id);
+        if (schedule) {
+          totalDifficulty += schedule.difficulty;
+          difficultyCount++;
+        }
+      }
+      const avgDifficulty = difficultyCount > 0 ? totalDifficulty / difficultyCount : 5;
+
+      // Deck/topic names
+      const deckIds = new Set(cards.map((c) => c.deckId));
+      const deckNames: string[] = [];
+      for (const did of deckIds) {
+        const deck = cardRepo.getDeck(did);
+        if (deck) deckNames.push(deck.name);
+      }
+
+      return {
+        avgDifficulty: Math.round(avgDifficulty * 10) / 10,
+        deckNames: deckNames.length > 0 ? deckNames.join(", ") : "Mixed",
+        xpReward: enemy.xpReward,
+        goldReward: enemy.goldReward,
+      };
+    } catch {
+      return {
+        avgDifficulty: 5,
+        deckNames: "Unknown",
+        xpReward: enemy.xpReward,
+        goldReward: enemy.goldReward,
+      };
+    }
+  }, [cards, enemy]);
 
   const currentCard = cardQueue[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
@@ -490,6 +539,20 @@ export function CombatScreen({
   );
 
   // ─── Render ───────────────────────────────────────────
+
+  // Encounter preview phase
+  if (phase === "encounter_preview") {
+    return (
+      <EncounterPreview
+        enemy={combat.enemy}
+        cardCount={cards.length}
+        previewData={previewData}
+        isDungeonFloor={isDungeonFloor}
+        onFight={() => setPhase("intro")}
+        onRetreat={onRetreat}
+      />
+    );
+  }
 
   // Intro phase
   if (phase === "intro") {

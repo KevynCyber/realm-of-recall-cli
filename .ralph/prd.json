@@ -390,7 +390,7 @@
         "Tests pass"
       ],
       "priority": 21,
-      "passes": false,
+      "passes": true,
       "notes": "Agency research: pre-action information (seeing randomness before deciding) is the key difference between meaningful choice and gambling (Thom.ee). All data for the preview already exists at combat preparation time."
     },
     {
