@@ -37,6 +37,7 @@ import { PlayerRepository } from "../../data/repositories/PlayerRepository.js";
 import { CardRepository } from "../../data/repositories/CardRepository.js";
 import { StatsRepository } from "../../data/repositories/StatsRepository.js";
 import { EquipmentRepository } from "../../data/repositories/EquipmentRepository.js";
+import { EnemyRepository } from "../../data/repositories/EnemyRepository.js";
 import { ZoneRepository } from "../../data/repositories/ZoneRepository.js";
 import { ReflectionRepository } from "../../data/repositories/ReflectionRepository.js";
 import { AchievementRepository } from "../../data/repositories/AchievementRepository.js";
@@ -689,6 +690,7 @@ export default function App() {
         const playerRepo = new PlayerRepository(db);
         const statsRepo = new StatsRepository(db);
         const equipRepo = new EquipmentRepository(db);
+        const enemyRepo = new EnemyRepository(db);
 
         // Update streak
         const today = getTodayUTC();
@@ -738,6 +740,11 @@ export default function App() {
         if (result.loot) {
           equipRepo.addEquipment(result.loot);
           equipRepo.addToInventory(result.loot.id);
+        }
+
+        // Track enemy encounter on victory
+        if (result.victory && combatEnemy) {
+          enemyRepo.trackEncounter(combatEnemy.name, combatEnemy.tier);
         }
 
         // Update FSRS schedules for reviewed cards

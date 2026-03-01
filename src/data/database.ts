@@ -258,4 +258,18 @@ const migrations = [
     name: "011_card_variants",
     sql: `ALTER TABLE recall_stats ADD COLUMN variant TEXT DEFAULT NULL;`,
   },
+  {
+    name: "012_enemy_encounters",
+    sql: `
+      CREATE TABLE enemy_encounters (
+        id INTEGER PRIMARY KEY,
+        enemy_name TEXT NOT NULL,
+        enemy_tier INTEGER NOT NULL,
+        times_defeated INTEGER DEFAULT 0,
+        first_defeated_at TEXT,
+        last_defeated_at TEXT,
+        UNIQUE(enemy_name, enemy_tier)
+      );
+    `,
+  },
 ];
