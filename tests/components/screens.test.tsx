@@ -282,6 +282,40 @@ describe("StatsScreen", () => {
     stdin.write("b");
     expect(onBack).toHaveBeenCalledOnce();
   });
+
+  it("renders Collection section with variant counts", () => {
+    const onBack = vi.fn();
+    const variantCounts = { foil: 12, golden: 3, prismatic: 0 };
+    const { lastFrame } = render(
+      themed(
+        <StatsScreen
+          player={makePlayer()}
+          deckStats={[]}
+          fsrsStats={fsrsStats}
+          onBack={onBack}
+          variantCounts={variantCounts}
+        />,
+      ),
+    );
+    const frame = lastFrame();
+    expect(frame).toContain("Collection");
+    expect(frame).toContain("12 Foil");
+    expect(frame).toContain("3 Golden");
+    expect(frame).toContain("0 Prismatic");
+    expect(frame).toContain("\u2726");
+    expect(frame).toContain("\u2605");
+    expect(frame).toContain("\u25C6");
+  });
+
+  it("does not render Collection section when variantCounts is not provided", () => {
+    const onBack = vi.fn();
+    const { lastFrame } = render(
+      themed(
+        <StatsScreen player={makePlayer()} deckStats={[]} fsrsStats={fsrsStats} onBack={onBack} />,
+      ),
+    );
+    expect(lastFrame()).not.toContain("Collection");
+  });
 });
 
 // ─── MapScreen ───

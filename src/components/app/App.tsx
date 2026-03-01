@@ -185,6 +185,7 @@ export default function App() {
   const [retentionBonusCards, setRetentionBonusCards] = useState<{ cardId: string; multiplier: number }[]>([]);
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
+  const [sessionNewVariants, setSessionNewVariants] = useState<Array<{ cardId: string; variant: "foil" | "golden" | "prismatic" }>>([]);
 
   // Retrieval mode state
   const [currentRetrievalMode, setCurrentRetrievalMode] = useState<RetrievalMode>(RetrievalMode.Standard);
@@ -871,6 +872,7 @@ export default function App() {
 
         // Update each card's FSRS schedule and compute retention bonuses
         const bonusCards: { cardId: string; multiplier: number }[] = [];
+        const earnedVariants: Array<{ cardId: string; variant: "foil" | "golden" | "prismatic" }> = [];
         let retentionXpBonus = 0;
         for (const result of results) {
           const existing = statsRepo.getSchedule(result.cardId);
@@ -935,6 +937,7 @@ export default function App() {
             );
             if (variant) {
               statsRepo.awardVariant(result.cardId, variant);
+              earnedVariants.push({ cardId: result.cardId, variant: variant as "foil" | "golden" | "prismatic" });
             }
           }
         }
@@ -961,6 +964,7 @@ export default function App() {
         setReviewResults(results);
         setReviewXp(xpGained);
         setRetentionBonusCards(bonusCards);
+        setSessionNewVariants(earnedVariants);
         const didLevelUp = updated.level > prevLevel;
         setLeveledUp(didLevelUp);
         setNewLevel(updated.level);
@@ -1266,6 +1270,7 @@ export default function App() {
               leveledUp={leveledUp}
               newLevel={newLevel}
               retentionBonusCards={retentionBonusCards}
+              newVariants={sessionNewVariants}
             />
             <Box marginTop={1} justifyContent="center">
               <Text dimColor italic>
@@ -1377,6 +1382,15 @@ export default function App() {
             accuracyTrend={accuracyTrend}
             speedTrend={speedTrend}
             wisdomXp={player.wisdomXp}
+            variantCounts={(() => {
+              try {
+                const db = getDatabase();
+                const statsRepo = new StatsRepository(db);
+                return statsRepo.getVariantCounts();
+              } catch {
+                return undefined;
+              }
+            })()}
           />
         ) : null;
       case "achievements":

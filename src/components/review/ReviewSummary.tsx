@@ -14,6 +14,17 @@ export interface RetentionBonusCard {
   multiplier: number;
 }
 
+export interface NewVariantNotification {
+  cardId: string;
+  variant: "foil" | "golden" | "prismatic";
+}
+
+const VARIANT_DISPLAY: Record<string, { symbol: string; color: string; label: string }> = {
+  foil: { symbol: "\u2726", color: "cyan", label: "Foil" },       // ✦
+  golden: { symbol: "\u2605", color: "yellow", label: "Golden" },  // ★
+  prismatic: { symbol: "\u25C6", color: "magenta", label: "Prismatic" }, // ◆
+};
+
 interface Props {
   results: ReviewResult[];
   xpEarned?: number;
@@ -21,9 +32,10 @@ interface Props {
   leveledUp?: boolean;
   newLevel?: number;
   retentionBonusCards?: RetentionBonusCard[];
+  newVariants?: NewVariantNotification[];
 }
 
-export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel, retentionBonusCards }: Props) {
+export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLevel, retentionBonusCards, newVariants }: Props) {
   const total = results.length;
   const perfect = results.filter(
     (r) => r.quality === AnswerQuality.Perfect,
@@ -90,6 +102,18 @@ export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLev
               {`  Card ${b.cardId.slice(0, 8)}... (${b.multiplier}x)`}
             </Text>
           ))}
+        </Box>
+      )}
+      {newVariants && newVariants.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          {newVariants.map((v) => {
+            const display = VARIANT_DISPLAY[v.variant];
+            return (
+              <Text key={v.cardId} bold color={display.color}>
+                {display.symbol} NEW VARIANT! {display.label} {display.symbol}
+              </Text>
+            );
+          })}
         </Box>
       )}
       {leveledUp && newLevel !== undefined && (
