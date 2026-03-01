@@ -166,6 +166,21 @@ export function CombatScreen({
     }
   }, [cards]);
 
+  // Look up card variants for all cards
+  const cardVariants = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const variants = new Map<string, string | null>();
+      for (const c of cards) {
+        variants.set(c.id, statsRepo.getCardVariant(c.id));
+      }
+      return variants;
+    } catch {
+      return new Map<string, string | null>();
+    }
+  }, [cards]);
+
   // Compute encounter preview data
   const previewData = useMemo(() => {
     try {
@@ -212,6 +227,7 @@ export function CombatScreen({
   const currentCard = cardQueue[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
   const currentHealth = currentCard ? (cardHealthMap.get(currentCard.id) ?? "healthy") : "healthy";
+  const currentVariant = currentCard ? (cardVariants.get(currentCard.id) ?? null) : null;
   const configuredTimer = combatSettings?.timerSeconds ?? 30;
   const totalTime = configuredTimer === 0 ? Infinity : configuredTimer; // 0 = disabled
 
@@ -750,7 +766,7 @@ export function CombatScreen({
       {/* Middle: Card content */}
       {phase === "card" && currentCard && !cardActionMsg && (
         <>
-          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} isRetry={(requeueCounts.get(currentCard.id) ?? 0) > 0 && combat.currentCardIndex >= cards.length} />
+          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} isRetry={(requeueCounts.get(currentCard.id) ?? 0) > 0 && combat.currentCardIndex >= cards.length} variant={currentVariant as any} />
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />

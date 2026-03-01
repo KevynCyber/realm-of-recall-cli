@@ -16,6 +16,14 @@ type BorderStyleName =
 
 const TIER_NAMES = ["New", "Learned", "Proven", "Mastered"];
 
+export type CardVariantType = "foil" | "golden" | "prismatic" | null;
+
+const VARIANT_STYLES: Record<string, { borderColor: string; symbol: string }> = {
+  foil: { borderColor: "cyan", symbol: "\u2726" },       // ✦
+  golden: { borderColor: "yellow", symbol: "\u2605" },    // ★
+  prismatic: { borderColor: "magenta", symbol: "\u25C6" }, // ◆
+};
+
 interface Props {
   card: Card;
   showAnswer: boolean;
@@ -23,6 +31,7 @@ interface Props {
   cardHealth?: "healthy" | "struggling" | "leech";
   consecutiveCorrect?: number;
   isRetry?: boolean;
+  variant?: CardVariantType;
 }
 
 export function FlashcardFace({
@@ -32,6 +41,7 @@ export function FlashcardFace({
   cardHealth,
   consecutiveCorrect,
   isRetry,
+  variant,
 }: Props) {
   const isCloze = card.type === CardType.ClozeDeletion;
   const frontText = isCloze ? parseCloze(card.front).displayText : card.front;
@@ -48,6 +58,12 @@ export function FlashcardFace({
   }
   if (tier >= 1) stars = "\u2605".repeat(tier);
 
+  // Variant overrides border color
+  const variantStyle = variant ? VARIANT_STYLES[variant] : null;
+  if (variantStyle) {
+    borderColor = variantStyle.borderColor;
+  }
+
   // Health color overrides
   const healthColor =
     cardHealth === "leech" ? "red" :
@@ -61,6 +77,8 @@ export function FlashcardFace({
   if (cardHealth === "leech") borderColor = "red";
 
   const headerLabel = showAnswer ? "Answer" : "Question";
+  const variantPrefix = variantStyle ? `${variantStyle.symbol} ` : "";
+  const variantSuffix = variantStyle ? ` ${variantStyle.symbol}` : "";
   const tierName = TIER_NAMES[Math.min(tier, 3)];
 
   // Evolution progress bar (simple ASCII)
@@ -80,7 +98,7 @@ export function FlashcardFace({
     >
       <Box>
         <Text bold color={borderColor}>
-          {headerLabel}
+          {variantPrefix}{headerLabel}{variantSuffix}
           {stars ? ` ${stars}` : ""}
         </Text>
         {tier > 0 && (

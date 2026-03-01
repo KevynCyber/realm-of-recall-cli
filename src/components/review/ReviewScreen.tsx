@@ -102,6 +102,21 @@ export function ReviewScreen({
     }
   }, [cards]);
 
+  // Look up card variants for all cards
+  const cardVariants = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const variants = new Map<string, string | null>();
+      for (const c of cards) {
+        variants.set(c.id, statsRepo.getCardVariant(c.id));
+      }
+      return variants;
+    } catch {
+      return new Map<string, string | null>();
+    }
+  }, [cards]);
+
   // Successive relearning: mutable card queue and re-queue tracking
   const MAX_REQUEUES = 2;
   const [cardQueue, setCardQueue] = useState<Card[]>(() => [...cards]);
@@ -494,6 +509,7 @@ export function ReviewScreen({
           evolutionTier={cardTiers.get(card.id) ?? 0}
           cardHealth={cardHealthMap.get(card.id) ?? "healthy"}
           isRetry={(requeueCounts.get(card.id) ?? 0) > 0 && currentIndex >= cards.length}
+          variant={(cardVariants.get(card.id) ?? null) as any}
         />
       )}
 

@@ -30,6 +30,12 @@ const NEW_CARDS_PRESETS = [5, 10, 15, 20, 30, 50, 100, 9999] as const;
 /** Valid answer timer presets (0 = disabled) */
 const TIMER_PRESETS = [15, 20, 30, 45, 60, 0] as const;
 
+interface VariantCounts {
+  foil: number;
+  golden: number;
+  prismatic: number;
+}
+
 interface Props {
   player: Player;
   deckStats: DeckStat[];
@@ -43,6 +49,7 @@ interface Props {
   speedTrend?: TrendResult;
   consistencyGrid?: string;
   wisdomXp?: number;
+  variantCounts?: VariantCounts;
 }
 
 function XPProgressBar({ xp, xpNeeded, color }: { xp: number; xpNeeded: number; color: string }) {
@@ -70,6 +77,7 @@ export function StatsScreen({
   speedTrend,
   consistencyGrid,
   wisdomXp,
+  variantCounts,
 }: Props) {
   const theme = useGameTheme();
   const [settingsTab, setSettingsTab] = useState<"retention" | "newcards" | "timer">("retention");
@@ -207,7 +215,23 @@ export function StatsScreen({
         )}
       </Box>
 
-      {/* Section 6 — Progress Trends (Ultra-Learner) */}
+      {/* Section 6 — Collection (Rare Variants) */}
+      {variantCounts && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.rare}>
+            Collection
+          </Text>
+          <Text>
+            <Text color="cyan">{"\u2726"} {variantCounts.foil} Foil</Text>
+            <Text>{" | "}</Text>
+            <Text color="yellow">{"\u2605"} {variantCounts.golden} Golden</Text>
+            <Text>{" | "}</Text>
+            <Text color="magenta">{"\u25C6"} {variantCounts.prismatic} Prismatic</Text>
+          </Text>
+        </Box>
+      )}
+
+      {/* Section 7 — Progress Trends (Ultra-Learner) */}
       {accuracyTrend && (
         <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
           <Text bold color={theme.colors.xp}>
