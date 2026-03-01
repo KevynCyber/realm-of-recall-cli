@@ -574,7 +574,7 @@
         "Tests pass"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "Final story. Run after all feature stories are complete."
     }
   ]

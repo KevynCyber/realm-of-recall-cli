@@ -6,24 +6,54 @@ Learn anything through spaced repetition, gamified with RPG combat, progression,
 
 ## Features
 
+### Core Gameplay
 - **RPG Combat** — Answer flashcards to deal damage. Perfect answers crit, wrong answers let enemies strike back.
-- **Dungeon Run** — 5-floor gauntlet with scaling difficulty, random events between floors, and bonus rewards.
+- **Dungeon Run** — 5-8 floor gauntlet with scaling difficulty, random events between floors, and bonus rewards. Extended dungeon unlocked via ascension.
 - **Daily Challenge** — Seeded daily encounters with scoring leaderboard (accuracy + speed + damage).
 - **Player Classes** — Scholar (Reveal/Insight/Wisdom Surge), Warrior (Endure/Battle Cry/Fortify), Rogue (Steal/Shadow Strike/Lucky Find).
 - **Class Abilities** — 9 abilities with SP costs and cooldowns, unlocking at levels 3/7/12.
-- **Ascension System** — 10 difficulty levels with cumulative modifiers for replayability.
-- **FSRS Scheduling** — Modern spaced repetition algorithm for optimal review timing.
+- **Encounter Preview** — See enemy stats, difficulty, and rewards before committing to fight. Retreat with no penalty.
+- **Equipment Special Effects** — Bonus damage, healing, double crits, and gold multipliers from equipped gear.
+
+### Learning Science
+- **FSRS Scheduling** — Modern spaced repetition algorithm with configurable desired retention (0.70-0.97).
+- **Successive Relearning** — Wrong cards re-queued in the same session for immediate re-practice.
+- **Max New Cards Per Day** — Configurable daily limit (default 20) prevents overwhelm from large deck imports.
+- **Configurable Answer Timer** — Adjust timer (15s/20s/30s/45s/60s/Off) for accessibility.
 - **Diminishing-Cues Hints** — Press [H] for progressive hints (first letter, every 3rd, every other, full reveal).
 - **Cross-Deck Interleaving** — Cards mixed across decks for 30% better retention (Bjork research).
-- **24 Achievements** — Track accomplishments across Learning, Combat, Progression, and Exploration.
-- **Confidence Rating** — Rate your confidence after correct answers for smarter scheduling.
-- **Card Evolution** — Cards evolve through 4 tiers (New → Learned → Proven → Mastered) with combat bonuses.
 - **Retrieval Modes** — Standard, Reversed, Teach, and Connect modes for deeper learning.
+- **Elaborative Interrogation** — "Why is this true?" prompts after correct answers for deeper understanding.
+- **Confidence Rating** — Rate your confidence after correct answers for smarter scheduling.
+- **Card Suspend & Bury** — Press [S] to suspend leeches, [B] to bury until tomorrow.
+- **Undo Last Answer** — Press [U] to revert typos and accidental submissions.
+- **Session Guardrails** — Break suggestions after 15-25 minutes to prevent diminishing returns.
+- **Welcome Back Flow** — Gentle re-engagement with prioritized catch-up when returning after days away.
+- **In-App Card Creation** — Create flashcards directly in the app (generation effect improves retention).
+- **Data Export** — `ror export` backs up all decks, cards, and progress to JSON.
+
+### Progression & Rewards
+- **Card Evolution** — Cards evolve through 4 tiers (New/Learned/Proven/Mastered) with combat damage bonuses (up to 2x).
+- **Rare Card Variants** — Earn foil, golden, or prismatic card variants on perfect recalls. Variable-ratio reward schedule.
+- **Delayed Retention Rewards** — 3-5x XP/gold bonuses for successful long-interval recalls (spacing effect).
+- **Streak Decay** — Missed days reduce streak gradually instead of hard reset. Earn-back on return.
+- **Idle Progression** — Earn capped gold and recover HP while away.
+- **Wisdom XP Perks** — 5 learning perks unlocked by reflection engagement (Extra Hint, Study Shield, Quick Learner, Deep Focus, Sage's Insight).
+- **Ascension System** — 10 difficulty levels with cumulative modifiers and meta-progression unlocks.
+- **Meta-Progression** — 8 permanent unlocks gated by ascension level (new modes, variants, extended dungeon, cosmetics).
+- **24 Achievements** — Track accomplishments across Learning, Combat, Progression, and Exploration.
+
+### World & Narrative
+- **World Map** — Zone progression tied to deck mastery with boss fights.
+- **Bestiary & Collection** — Gallery of encountered enemies and per-deck mastery progress.
+- **Narrative Lore on Defeat** — 20 lore fragments revealed on combat loss (Hades-inspired meaningful failure).
 - **Random Events** — 8 event types (treasures, merchants, shrines, blessings, rest camps, curses, wisdom wells, streak guardians).
 - **Post-Session Reflection** — Earn Wisdom XP through micro-reflections and optional journaling.
-- **Equipment & Loot** — Defeat enemies to earn gear across 4 rarities.
-- **Streak System** — Daily study streaks with XP bonuses (up to +50% at 30 days) and shield protection.
-- **World Map** — Zone progression tied to deck mastery with boss fights.
+
+### Technical
+- **Equipment & Loot** — Defeat enemies to earn gear across 4 rarities with functional special effects.
+- **Card Health Indicators** — Visual warnings for struggling and leech cards with narrative guidance.
+- **Terminal Title Bar** — Dynamic title updates and BEL notifications on key events.
 - **Progress Dashboard** — Sparkline trends, consistency grids, and marginal gains tracking.
 - **Fullscreen TUI** — Polished terminal interface with keyboard navigation.
 
@@ -95,7 +125,7 @@ Confidence ratings further adjust scheduling: a "Lucky Guess" correct answer get
 ## Development
 
 ```bash
-npm test          # Run tests (669 tests)
+npm test          # Run tests (1187 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```
