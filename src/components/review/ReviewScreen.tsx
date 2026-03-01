@@ -107,6 +107,9 @@ export function ReviewScreen({
   const [showHint, setShowHint] = useState(false);
   // Suspend/bury confirmation
   const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
+  // Undo support: tracks whether the current card was reached via undo (prevent double undo)
+  const [undoUsed, setUndoUsed] = useState(false);
+  const [undoMsg, setUndoMsg] = useState<string | null>(null);
 
   const card = cardQueue[currentIndex];
   const totalTime = 30; // seconds
@@ -181,6 +184,7 @@ export function ReviewScreen({
         setPendingResponseText(undefined);
         setHintLevel(0);
         setShowHint(false);
+        setUndoUsed(false);
       }
     },
     [cardQueue.length, currentIndex, onComplete, card, lastQuality, requeueCard],
@@ -239,6 +243,23 @@ export function ReviewScreen({
   // Feedback phase — press Enter to continue (only for wrong/timeout/partial in standard modes)
   useInput(
     (_input, key) => {
+      if (_input === "u" || _input === "U") {
+        if (!undoUsed && results.length > 0) {
+          // Undo: remove last result, go back to question phase
+          setResults((prev) => prev.slice(0, -1));
+          setPhase("question");
+          setInput("");
+          setLastQuality(null);
+          setCardStart(Date.now());
+          setPendingResponseText(undefined);
+          setHintLevel(0);
+          setShowHint(false);
+          setUndoUsed(true);
+          setUndoMsg("Answer undone");
+          setTimeout(() => setUndoMsg(null), 1500);
+          return;
+        }
+      }
       if (key.return || _input === " ") {
         if (
           lastQuality !== null &&
@@ -483,6 +504,13 @@ export function ReviewScreen({
         </Box>
       )}
 
+      {/* Undo confirmation message */}
+      {undoMsg && (
+        <Box marginTop={1}>
+          <Text bold color="yellow">{undoMsg}</Text>
+        </Box>
+      )}
+
       {/* Feedback display (standard / reversed modes) */}
       {phase === "feedback" && lastQuality !== null && (
         <Box flexDirection="column" marginTop={1}>
@@ -492,7 +520,7 @@ export function ReviewScreen({
             <Text color="green">{effectiveCard.back}</Text>
           </Text>
           <Text dimColor italic>
-            Press Enter to continue...
+            Press Enter to continue...{!undoUsed ? " [U] undo" : ""}
           </Text>
         </Box>
       )}

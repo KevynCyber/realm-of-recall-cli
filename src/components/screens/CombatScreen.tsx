@@ -115,6 +115,17 @@ export function CombatScreen({
   const unlockedAbilities = getUnlockedAbilities(player.class, player.level);
   // Suspend/bury confirmation
   const [cardActionMsg, setCardActionMsg] = useState<string | null>(null);
+  // Undo support: snapshot of combat state before last answer
+  const [preAnswerSnapshot, setPreAnswerSnapshot] = useState<{
+    combat: CombatState;
+    cardQueue: Card[];
+    requeueCounts: Map<string, number>;
+    activeEffects: AbilityEffect[];
+    activeAbilities: ActiveAbility[];
+    currentSp: number;
+  } | null>(null);
+  const [undoUsed, setUndoUsed] = useState(false);
+  const [undoMsg, setUndoMsg] = useState<string | null>(null);
 
   // Look up evolution tiers for all cards
   const cardTiers = useMemo(() => {
@@ -178,10 +189,36 @@ export function CombatScreen({
         setLastQuality(null);
         setLastDamage(null);
         setCardStart(Date.now());
+        setUndoUsed(false);
       }
     }, 800);
     return () => clearTimeout(timer);
   }, [phase, combat]);
+
+  // -- Handle [U] undo during resolve phase --
+  useInput(
+    (input) => {
+      if ((input === "u" || input === "U") && !undoUsed && preAnswerSnapshot) {
+        // Restore pre-answer state
+        setCombat(preAnswerSnapshot.combat);
+        setCardQueue(preAnswerSnapshot.cardQueue);
+        setRequeueCounts(preAnswerSnapshot.requeueCounts);
+        setActiveEffects(preAnswerSnapshot.activeEffects);
+        setActiveAbilities(preAnswerSnapshot.activeAbilities);
+        setCurrentSp(preAnswerSnapshot.currentSp);
+        setPreAnswerSnapshot(null);
+        setPhase("card");
+        setInput("");
+        setLastQuality(null);
+        setLastDamage(null);
+        setCardStart(Date.now());
+        setUndoUsed(true);
+        setUndoMsg("Answer undone");
+        setTimeout(() => setUndoMsg(null), 1500);
+      }
+    },
+    { isActive: phase === "resolve" },
+  );
 
   const finishCombat = useCallback(
     (won: boolean) => {
@@ -209,6 +246,17 @@ export function CombatScreen({
   const handleSubmit = useCallback(
     (answer: string) => {
       if (!currentCard) return;
+      // Save snapshot for undo before processing
+      setPreAnswerSnapshot({
+        combat: JSON.parse(JSON.stringify(combat)),
+        cardQueue: [...cardQueue],
+        requeueCounts: new Map(requeueCounts),
+        activeEffects: activeEffects.map((e) => ({ ...e })),
+        activeAbilities: activeAbilities.map((a) => ({ ...a, ability: { ...a.ability } })),
+        currentSp,
+      });
+      setUndoUsed(false);
+
       const responseTime = (Date.now() - cardStart) / 1000;
       let quality = evaluateAnswer(currentCard, answer, responseTime, totalTime);
       // Ascension: treat Partial as Wrong when partial credit is disabled
@@ -645,6 +693,13 @@ export function CombatScreen({
         </>
       )}
 
+      {/* Undo confirmation message */}
+      {undoMsg && (
+        <Box marginTop={1}>
+          <Text bold color="yellow">{undoMsg}</Text>
+        </Box>
+      )}
+
       {phase === "resolve" && (
         <Box flexDirection="column" marginTop={1}>
           {lastQuality !== null && <QualityFeedback quality={lastQuality} />}
@@ -657,6 +712,9 @@ export function CombatScreen({
             <Box marginTop={1}>
               <DamageNumber amount={lastDamage} type={lastDamageType} />
             </Box>
+          )}
+          {!undoUsed && preAnswerSnapshot && (
+            <Text dimColor italic>[U] undo</Text>
           )}
         </Box>
       )}
