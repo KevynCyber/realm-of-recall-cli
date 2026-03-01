@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { AnswerQuality } from "../../types/index.js";
+import { LEVEL_UP_ART } from "../../core/ui/TerminalEffects.js";
 
 interface ReviewResult {
   cardId: string;
@@ -74,7 +75,12 @@ export function ReviewSummary({ results, xpEarned, goldEarned, leveledUp, newLev
         <Text color="yellow">Gold: +{goldEarned}</Text>
       )}
       {leveledUp && newLevel !== undefined && (
-        <Text bold color="yellow">LEVEL UP! You are now level {newLevel}!</Text>
+        <Box flexDirection="column" marginTop={1}>
+          {LEVEL_UP_ART.map((line, i) => (
+            <Text key={i} bold color="yellow">{line}</Text>
+          ))}
+          <Text bold color="yellow">You are now level {newLevel}!</Text>
+        </Box>
       )}
     </Box>
   );

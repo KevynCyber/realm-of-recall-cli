@@ -13,6 +13,7 @@ import { DeckScreen } from "../screens/DeckScreen.js";
 import { AchievementScreen } from "../screens/AchievementScreen.js";
 import { DailyChallengeScreen } from "../screens/DailyChallengeScreen.js";
 import { DungeonRunScreen } from "../screens/DungeonRunScreen.js";
+import { RandomEventScreen } from "../screens/RandomEventScreen.js";
 import { ReviewScreen } from "../review/ReviewScreen.js";
 import type { ReviewResult } from "../review/ReviewScreen.js";
 import { ReviewSummary } from "../review/ReviewSummary.js";
@@ -48,10 +49,19 @@ import {
 } from "../../core/analytics/MarginalGains.js";
 import { checkNewAchievements } from "../../core/progression/Achievements.js";
 import type { AchievementState } from "../../core/progression/Achievements.js";
+import { interleaveCards } from "../../core/review/Interleaver.js";
+import {
+  applyAscensionToEnemy,
+  getActiveModifiers,
+  canUnlockNextAscension,
+} from "../../core/progression/AscensionSystem.js";
 import {
   getDailySeed,
   generateDailyChallenge,
 } from "../../core/combat/DailyChallenge.js";
+import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents.js";
+import { playBel } from "../../core/ui/TerminalEffects.js";
+import type { RandomEvent, EventOutcome } from "../../core/combat/RandomEvents.js";
 import type { DailyChallengeConfig } from "../../core/combat/DailyChallenge.js";
 import type {
   Player,
@@ -79,7 +89,8 @@ export type Screen =
   | "decks"
   | "achievements"
   | "daily_challenge"
-  | "dungeon";
+  | "dungeon"
+  | "random_event";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -144,6 +155,14 @@ export default function App() {
 
   // Daily challenge state
   const [dailyChallengeConfig, setDailyChallengeConfig] = useState<DailyChallengeConfig | null>(null);
+
+  // Ascension state for map screen
+  const [mapAscensionLevel, setMapAscensionLevel] = useState(0);
+  const [mapCanAscend, setMapCanAscend] = useState(false);
+
+  // Post-combat random event state
+  const [randomEvent, setRandomEvent] = useState<RandomEvent | null>(null);
+  const [eventOutcome, setEventOutcome] = useState<EventOutcome | null>(null);
 
   // Reflection flow state
   const [reflectionAccuracy, setReflectionAccuracy] = useState(0);
@@ -245,6 +264,7 @@ export default function App() {
       for (const achievement of newAchievements) {
         achievementRepo.unlock(achievement.key, achievement.title, achievement.description);
       }
+      if (newAchievements.length > 0) playBel();
     } catch {
       // ignore
     }
@@ -276,14 +296,36 @@ export default function App() {
         const statsRepo = new StatsRepository(db);
         const equipRepo = new EquipmentRepository(db);
 
-        const deckFilter = deckId ?? cardRepo.getEquippedDeckIds();
-        const dueIds = statsRepo.getDueCards(deckFilter, 10);
-        const cards = dueIds
-          .map((id) => cardRepo.getCard(id))
-          .filter((c): c is Card => c !== undefined);
+        let cards: Card[];
+        if (deckId) {
+          // Zone-specific combat: pull from single deck
+          const dueIds = statsRepo.getDueCards(deckId, 10);
+          cards = dueIds
+            .map((id) => cardRepo.getCard(id))
+            .filter((c): c is Card => c !== undefined);
+        } else {
+          // Hub combat: interleave across equipped decks
+          const equippedDeckIds = cardRepo.getEquippedDeckIds();
+          const cardsByDeck = new Map<string, Card[]>();
+          for (const did of equippedDeckIds) {
+            const dueIds = statsRepo.getDueCards(did, 20);
+            const deckCards = dueIds
+              .map((id) => cardRepo.getCard(id))
+              .filter((c): c is Card => c !== undefined);
+            if (deckCards.length > 0) {
+              cardsByDeck.set(did, deckCards);
+            }
+          }
+          cards = interleaveCards(cardsByDeck, 10);
+        }
         if (cards.length === 0) return false;
 
-        const enemy = generateEnemy(5, player.level);
+        let enemy = generateEnemy(5, player.level);
+        // Apply ascension modifiers to enemy
+        if (player.ascensionLevel > 0) {
+          enemy = applyAscensionToEnemy(enemy, player.ascensionLevel);
+        }
+
         const equipped = equipRepo.getEquipped();
         setCombatCards(cards);
         setCombatEnemy(enemy);
@@ -343,6 +385,7 @@ export default function App() {
           break;
         }
         case "map": {
+          if (!player) break;
           try {
             const db = getDatabase();
             const statsRepo = new StatsRepository(db);
@@ -364,6 +407,8 @@ export default function App() {
               };
             });
             setZoneData(zoneInfos);
+            setMapAscensionLevel(player.ascensionLevel);
+            setMapCanAscend(canUnlockNextAscension(player.ascensionLevel, zones));
             setScreen("map");
           } catch {
             // ignore
@@ -552,6 +597,19 @@ export default function App() {
 
         checkAchievements(updated);
         refreshCardsDue();
+
+        // 30% chance of random event after victory
+        if (result.victory) {
+          const hpPct = (updated.hp / updated.maxHp) * 100;
+          const event = rollForEvent(hpPct);
+          if (event) {
+            setRandomEvent(event);
+            setEventOutcome(null);
+            setScreen("random_event");
+            return;
+          }
+        }
+
         setScreen("hub");
       } catch (err: any) {
         console.error("Error saving combat results:", err.message);
@@ -624,8 +682,10 @@ export default function App() {
         setPlayer(updated);
         setReviewResults(results);
         setReviewXp(xpGained);
-        setLeveledUp(updated.level > prevLevel);
+        const didLevelUp = updated.level > prevLevel;
+        setLeveledUp(didLevelUp);
         setNewLevel(updated.level);
+        if (didLevelUp) playBel();
 
         // Calculate reflection data
         const reviewAccuracy =
@@ -782,7 +842,8 @@ export default function App() {
       screen === "combat" ||
       screen === "review" ||
       screen === "reflection" ||
-      screen === "dungeon"
+      screen === "dungeon" ||
+      screen === "random_event"
     )
       return;
     if (input === "q") {
@@ -878,6 +939,27 @@ export default function App() {
             zones={zoneData}
             onSelectZone={handleSelectZone}
             onBack={() => setScreen("hub")}
+            ascensionLevel={mapAscensionLevel}
+            activeModifiers={getActiveModifiers(mapAscensionLevel)}
+            canAscend={mapCanAscend}
+            onAscend={() => {
+              if (!player) return;
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = {
+                  ...player,
+                  ascensionLevel: player.ascensionLevel + 1,
+                };
+                playerRepo.updatePlayer(updated);
+                setPlayer(updated);
+                setMapAscensionLevel(updated.ascensionLevel);
+                setMapCanAscend(false);
+                checkAchievements(updated);
+              } catch {
+                // ignore
+              }
+            }}
           />
         );
       case "decks":
@@ -965,6 +1047,36 @@ export default function App() {
               setScreen("hub");
             }}
             onBack={() => setScreen("hub")}
+          />
+        ) : null;
+      case "random_event":
+        return randomEvent && player ? (
+          <RandomEventScreen
+            event={randomEvent}
+            playerLevel={player.level}
+            playerMaxHp={player.maxHp}
+            onComplete={(outcome) => {
+              if (!player) return;
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = {
+                  ...player,
+                  gold: Math.max(0, player.gold + outcome.goldChange),
+                  hp: Math.min(player.maxHp, Math.max(0, player.hp + outcome.hpChange)),
+                  xp: player.xp + Math.max(0, outcome.xpChange),
+                  wisdomXp: player.wisdomXp + outcome.wisdomXpChange,
+                };
+                const leveled = applyLevelUp(updated);
+                playerRepo.updatePlayer(leveled);
+                setPlayer(leveled);
+              } catch {
+                // ignore
+              }
+              setRandomEvent(null);
+              setEventOutcome(null);
+              setScreen("hub");
+            }}
           />
         ) : null;
       default:

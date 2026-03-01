@@ -28,8 +28,15 @@ import {
   generateCPJReframe,
   shouldShowCPJ,
 } from "../../core/reflection/ReflectionEngine.js";
+import {
+  getUnlockedAbilities,
+  canUseAbility,
+  getAbilityEffect,
+  tickCooldowns,
+} from "../../core/player/ClassAbilities.js";
+import type { ClassAbility, ActiveAbility, AbilityEffect } from "../../core/player/ClassAbilities.js";
 
-type Phase = "intro" | "card" | "resolve" | "result" | "reflection";
+type Phase = "intro" | "card" | "resolve" | "result" | "reflection" | "ability_menu";
 
 interface Props {
   cards: Card[];
@@ -69,6 +76,13 @@ export function CombatScreen({
   const [victory, setVictory] = useState(false);
   const [lootDismissed, setLootDismissed] = useState(false);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
+
+  // Ability state
+  const [currentSp, setCurrentSp] = useState(player.skillPoints);
+  const [activeAbilities, setActiveAbilities] = useState<ActiveAbility[]>([]);
+  const [activeEffects, setActiveEffects] = useState<AbilityEffect[]>([]);
+  const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
+  const unlockedAbilities = getUnlockedAbilities(player.class, player.level);
 
   const currentCard = cards[combat.currentCardIndex] ?? null;
   const totalTime = 30; // seconds per card
@@ -134,14 +148,45 @@ export function CombatScreen({
       const quality = evaluateAnswer(currentCard, answer, responseTime, totalTime);
       setLastQuality(quality);
 
+      // Apply active effects to attack power
+      let attackPower = stats.attack;
+      let critChance = stats.critChancePct;
+      const remainingEffects: AbilityEffect[] = [];
+      for (const effect of activeEffects) {
+        if (effect.type === "damage_boost" && (quality === AnswerQuality.Perfect || quality === AnswerQuality.Correct)) {
+          attackPower = Math.ceil(attackPower * effect.value);
+        } else if (effect.type === "critical_boost" && quality === AnswerQuality.Perfect) {
+          attackPower = Math.ceil(attackPower * effect.value);
+        } else if (effect.type === "absorb_damage" && (quality === AnswerQuality.Wrong || quality === AnswerQuality.Timeout)) {
+          // Will be handled below — prevent enemy damage
+        }
+        // Decrement duration
+        if (effect.duration > 1) {
+          remainingEffects.push({ ...effect, duration: effect.duration - 1 });
+        }
+      }
+      setActiveEffects(remainingEffects);
+
       const { newState, event } = resolveTurn(
         combat,
         quality,
-        stats.attack,
+        attackPower,
         stats.defense,
-        stats.critChancePct,
+        critChance,
       );
-      setCombat(newState);
+
+      // Check if we should absorb damage
+      const shouldAbsorb = activeEffects.some(
+        (e) => e.type === "absorb_damage" && (quality === AnswerQuality.Wrong || quality === AnswerQuality.Timeout),
+      );
+      const finalState = shouldAbsorb
+        ? { ...newState, playerHp: combat.playerHp }
+        : newState;
+
+      setCombat(finalState);
+
+      // Tick cooldowns after each answer
+      setActiveAbilities((prev) => tickCooldowns(prev));
 
       // Determine damage number display type
       setLastDamage(event.damage);
@@ -158,7 +203,65 @@ export function CombatScreen({
 
       setPhase("resolve");
     },
-    [currentCard, cardStart, combat, stats],
+    [currentCard, cardStart, combat, stats, activeEffects],
+  );
+
+  // -- Handle [A] key to open ability menu during card phase --
+  useInput(
+    (input) => {
+      if (input.toLowerCase() === "a" && unlockedAbilities.length > 0) {
+        setPhase("ability_menu");
+      }
+    },
+    { isActive: phase === "card" },
+  );
+
+  // -- Handle ability selection in ability menu --
+  useInput(
+    (input, key) => {
+      if (key.escape || input.toLowerCase() === "b") {
+        setPhase("card");
+        setAbilityMessage(null);
+        return;
+      }
+      const idx = parseInt(input, 10) - 1;
+      if (idx >= 0 && idx < unlockedAbilities.length) {
+        const ability = unlockedAbilities[idx];
+        if (!canUseAbility(ability, player.level, currentSp, activeAbilities)) {
+          setAbilityMessage("Cannot use — not enough SP or on cooldown");
+          return;
+        }
+        // Use the ability
+        setCurrentSp((sp) => sp - ability.spCost);
+        const effect = getAbilityEffect(ability.key);
+
+        // Handle immediate effects
+        if (effect.type === "heal") {
+          const healAmount = Math.ceil(stats.maxHp * (effect.value / 100));
+          setCombat((prev) => ({
+            ...prev,
+            playerHp: Math.min(stats.maxHp, prev.playerHp + healAmount),
+          }));
+          setAbilityMessage(`${ability.name}! Healed ${healAmount} HP`);
+        } else {
+          setActiveEffects((prev) => [...prev, effect]);
+          setAbilityMessage(`${ability.name} activated!`);
+        }
+
+        // Track cooldown
+        setActiveAbilities((prev) => [
+          ...prev.filter((a) => a.ability.key !== ability.key),
+          { ability, remainingCooldown: ability.cooldownTurns },
+        ]);
+
+        // Return to card phase after a brief moment
+        setTimeout(() => {
+          setPhase("card");
+          setAbilityMessage(null);
+        }, 800);
+      }
+    },
+    { isActive: phase === "ability_menu" },
   );
 
   // -- Handle Enter in result phase: transition to reflection --
@@ -207,6 +310,47 @@ export function CombatScreen({
         <Text bold color={theme.colors.warning}>
           A {enemy.name} appears!
         </Text>
+      </Box>
+    );
+  }
+
+  // Ability menu phase
+  if (phase === "ability_menu") {
+    return (
+      <Box flexDirection="column" paddingX={1}>
+        <Box marginBottom={1}>
+          <EnemyDisplay enemy={combat.enemy} />
+        </Box>
+        <Box marginBottom={1}>
+          <Text bold>SP: </Text>
+          <Text color="cyan">{currentSp}</Text>
+        </Box>
+        <Box flexDirection="column" borderStyle="round" borderColor="cyan" paddingX={1} paddingY={1}>
+          <Text bold color="cyan">Abilities</Text>
+          {unlockedAbilities.map((ability, idx) => {
+            const usable = canUseAbility(ability, player.level, currentSp, activeAbilities);
+            const active = activeAbilities.find((a) => a.ability.key === ability.key);
+            const cdText = active && active.remainingCooldown > 0
+              ? ` (CD: ${active.remainingCooldown})`
+              : "";
+            return (
+              <Text key={ability.key} dimColor={!usable}>
+                <Text bold={usable} color={usable ? "green" : undefined}>
+                  [{idx + 1}] {ability.name}
+                </Text>
+                <Text dimColor> — {ability.description} (SP: {ability.spCost}){cdText}</Text>
+              </Text>
+            );
+          })}
+          {abilityMessage && (
+            <Box marginTop={1}>
+              <Text color="yellow">{abilityMessage}</Text>
+            </Box>
+          )}
+          <Box marginTop={1}>
+            <Text dimColor italic>Press [1-{unlockedAbilities.length}] to use, [B/Esc] to cancel</Text>
+          </Box>
+        </Box>
       </Box>
     );
   }
@@ -317,7 +461,7 @@ export function CombatScreen({
         <EnemyDisplay enemy={combat.enemy} />
       </Box>
 
-      {/* Player HP */}
+      {/* Player HP and SP */}
       <Box marginBottom={1}>
         <Text>
           <Text bold>HP: </Text>
@@ -325,6 +469,13 @@ export function CombatScreen({
             {combat.playerHp}
           </Text>
           <Text>/{stats.maxHp}</Text>
+          {unlockedAbilities.length > 0 && (
+            <>
+              <Text>{"  "}</Text>
+              <Text bold>SP: </Text>
+              <Text color="cyan">{currentSp}</Text>
+            </>
+          )}
           <Text dimColor>
             {"  "}Card {combat.currentCardIndex + 1}/{cards.length}
           </Text>
@@ -339,6 +490,9 @@ export function CombatScreen({
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
           </Box>
+          {unlockedAbilities.length > 0 && (
+            <Text dimColor italic>Press [A] for abilities</Text>
+          )}
         </>
       )}
 

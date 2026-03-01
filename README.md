@@ -95,7 +95,7 @@ Confidence ratings further adjust scheduling: a "Lucky Guess" correct answer get
 ## Development
 
 ```bash
-npm test          # Run tests (649 tests)
+npm test          # Run tests (669 tests)
 npm run dev       # Run CLI in dev mode
 npm run build     # Build with tsup
 ```
