@@ -484,7 +484,7 @@
         "Tests pass"
       ],
       "priority": 26,
-      "passes": false,
+      "passes": true,
       "notes": "Depends on US-025 for enemy tracking data. Collection stats can be derived from existing StatsRepository.getDeckMasteryStats()."
     },
     {

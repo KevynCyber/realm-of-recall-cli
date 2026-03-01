@@ -21,6 +21,7 @@ const MENU_ITEMS = [
   { key: "8", label: "Stats", description: "View your statistics", screen: "stats" },
   { key: "9", label: "Manage Decks", description: "Toggle active decks for reviews", screen: "decks" },
   { key: "0", label: "Create Cards", description: "Author new flashcards", screen: "create_cards" },
+  { key: "b", label: "Bestiary", description: "Enemy encounters and collection", screen: "bestiary" },
 ] as const;
 
 export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanner, onNavigate }: Props) {
@@ -35,9 +36,10 @@ export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanne
     } else if (key.return) {
       onNavigate(MENU_ITEMS[selectedIndex].screen);
     } else {
-      const num = parseInt(input, 10);
-      if (num >= 1 && num <= MENU_ITEMS.length) {
-        onNavigate(MENU_ITEMS[num - 1].screen);
+      // Match by key shortcut (number or letter)
+      const match = MENU_ITEMS.find((item) => item.key === input);
+      if (match) {
+        onNavigate(match.screen);
       }
     }
   });
