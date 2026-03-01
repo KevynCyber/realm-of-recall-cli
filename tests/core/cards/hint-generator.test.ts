@@ -82,8 +82,13 @@ describe("generateHint", () => {
 });
 
 describe("getMaxHintLevel", () => {
-  it("returns 3", () => {
+  it("returns 3 by default", () => {
     expect(getMaxHintLevel()).toBe(3);
+  });
+
+  it("adds hint bonus to max level", () => {
+    expect(getMaxHintLevel(1)).toBe(4);
+    expect(getMaxHintLevel(2)).toBe(5);
   });
 });
 
@@ -98,5 +103,26 @@ describe("isFullReveal", () => {
     expect(isFullReveal(3)).toBe(true);
     expect(isFullReveal(4)).toBe(true);
     expect(isFullReveal(10)).toBe(true);
+  });
+
+  it("respects custom maxLevel", () => {
+    expect(isFullReveal(3, 4)).toBe(false);
+    expect(isFullReveal(4, 4)).toBe(true);
+  });
+});
+
+describe("generateHint with bonus level", () => {
+  it("level 3 with maxLevel 4 reveals 2 of every 3 letters instead of full answer", () => {
+    const hint = generateHint("Photosynthesis", 3, 4);
+    expect(hint).not.toBe("Photosynthesis");
+    expect(hint[0]).toBe("P"); // first always revealed
+    // index 3: 3%3===0 so it's hidden at level 3
+    expect(hint[3]).toBe("_");
+    // index 1: 1%3!==0 so it's revealed
+    expect(hint[1]).toBe("h");
+  });
+
+  it("level 4 with maxLevel 4 reveals full answer", () => {
+    expect(generateHint("Photosynthesis", 4, 4)).toBe("Photosynthesis");
   });
 });
