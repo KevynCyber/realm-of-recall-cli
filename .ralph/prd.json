@@ -148,7 +148,7 @@
         "Tests pass"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Currently wrong answers are just recorded and moved past. Research shows testing again in the same session (successive relearning) dramatically improves retention."
     },
     {

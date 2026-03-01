@@ -85,6 +85,13 @@ export function CombatScreen({
     }
     return state;
   });
+  // Successive relearning: mutable card queue and re-queue tracking
+  const MAX_REQUEUES = 2;
+  const [cardQueue, setCardQueue] = useState<Card[]>(() => [...cards]);
+  const [requeueCounts, setRequeueCounts] = useState<Map<string, number>>(
+    () => new Map(),
+  );
+
   const [input, setInput] = useState("");
   const [cardStart, setCardStart] = useState(Date.now());
   const [lastQuality, setLastQuality] = useState<AnswerQuality | null>(null);
@@ -138,7 +145,7 @@ export function CombatScreen({
     }
   }, [cards]);
 
-  const currentCard = cards[combat.currentCardIndex] ?? null;
+  const currentCard = cardQueue[combat.currentCardIndex] ?? null;
   const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
   const currentHealth = currentCard ? (cardHealthMap.get(currentCard.id) ?? "healthy") : "healthy";
   const totalTime = combatSettings?.timerSeconds ?? 30; // seconds per card
@@ -160,7 +167,7 @@ export function CombatScreen({
       const result = isCombatOver(combat);
       if (result.over) {
         finishCombat(result.victory);
-      } else if (combat.currentCardIndex >= cards.length) {
+      } else if (combat.currentCardIndex >= cardQueue.length) {
         // Out of cards - finish with current state
         finishCombat(combat.enemy.hp <= 0);
       } else {
@@ -252,6 +259,24 @@ export function CombatScreen({
         finalState.poisonDamage = combatSettings.enemyPoisonDamage;
       }
 
+      // Re-queue failed cards for successive relearning (if remaining cards exist)
+      if (
+        currentCard &&
+        (quality === AnswerQuality.Wrong || quality === AnswerQuality.Timeout)
+      ) {
+        const count = requeueCounts.get(currentCard.id) ?? 0;
+        if (count < MAX_REQUEUES) {
+          setCardQueue((prev) => [...prev, currentCard]);
+          // Update totalCards in the combat state so index check works
+          finalState.totalCards = cardQueue.length + 1;
+          setRequeueCounts((prev) => {
+            const next = new Map(prev);
+            next.set(currentCard.id, count + 1);
+            return next;
+          });
+        }
+      }
+
       setCombat(finalState);
 
       // Tick cooldowns after each answer
@@ -272,7 +297,7 @@ export function CombatScreen({
 
       setPhase("resolve");
     },
-    [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings],
+    [currentCard, cardStart, combat, stats, activeEffects, currentTier, combatSettings, cardQueue, requeueCounts],
   );
 
   // -- Handle [A] key to open ability menu during card phase --
@@ -547,7 +572,7 @@ export function CombatScreen({
             </>
           )}
           <Text dimColor>
-            {"  "}Card {combat.currentCardIndex + 1}/{cards.length}
+            {"  "}Card {combat.currentCardIndex + 1}/{cardQueue.length}
           </Text>
         </Text>
       </Box>
@@ -555,7 +580,7 @@ export function CombatScreen({
       {/* Middle: Card content */}
       {phase === "card" && currentCard && (
         <>
-          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} />
+          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} isRetry={(requeueCounts.get(currentCard.id) ?? 0) > 0 && combat.currentCardIndex >= cards.length} />
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
@@ -571,7 +596,7 @@ export function CombatScreen({
           {lastQuality !== null && <QualityFeedback quality={lastQuality} />}
           {currentCard && (
             <Text dimColor>
-              Answer: <Text color="green">{cards[combat.currentCardIndex - 1]?.back ?? ""}</Text>
+              Answer: <Text color="green">{cardQueue[combat.currentCardIndex - 1]?.back ?? ""}</Text>
             </Text>
           )}
           {lastDamage !== null && (
