@@ -69,6 +69,9 @@ export interface Player {
   wisdomXp: number;
   ascensionLevel: number;
   skillPoints: number;
+  skillRecall: number;
+  skillBattle: number;
+  skillScholar: number;
   dailyChallengeSeed: string | null;
   dailyChallengeCompleted: boolean;
   dailyChallengeScore: number;
