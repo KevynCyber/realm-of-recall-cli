@@ -1,5 +1,7 @@
 import { PlayerClass, type Player, type Equipment } from "../../types/index.js";
 import { CLASS_CONFIGS } from "./ClassDefinitions.js";
+import { getAggregatedEffects } from "../progression/SkillTree.js";
+import type { SkillAllocation } from "../progression/SkillTree.js";
 
 export interface EffectiveStats {
   maxHp: number;
@@ -11,7 +13,7 @@ export interface EffectiveStats {
 }
 
 /**
- * Compute effective stats from class base + level bonuses + equipment.
+ * Compute effective stats from class base + level bonuses + equipment + skill tree.
  *
  * Level bonuses (per level beyond 1):
  *   +5 maxHp, +2 attack, +1 defense
@@ -19,6 +21,7 @@ export interface EffectiveStats {
 export function getEffectiveStats(
   player: Player,
   equippedItems: Equipment[],
+  skillAllocation?: SkillAllocation,
 ): EffectiveStats {
   const config = CLASS_CONFIGS[player.class];
   const levelsGained = player.level - 1;
@@ -37,6 +40,20 @@ export function getEffectiveStats(
     xpBonusPct += item.xpBonusPct;
     goldBonusPct += item.goldBonusPct;
     critChancePct += item.critBonusPct;
+  }
+
+  // Apply skill tree bonuses (percentage-based)
+  if (skillAllocation) {
+    const effects = getAggregatedEffects(skillAllocation);
+    const hpBonus = effects.get("combat_hp_bonus") ?? 0;
+    const atkBonus = effects.get("combat_attack_bonus") ?? 0;
+    const critBonus = effects.get("combat_crit_bonus") ?? 0;
+    const goldSkillBonus = effects.get("gold_bonus") ?? 0;
+
+    maxHp = Math.floor(maxHp * (1 + hpBonus / 100));
+    attack = Math.floor(attack * (1 + atkBonus / 100));
+    critChancePct += critBonus;
+    goldBonusPct += goldSkillBonus;
   }
 
   return { maxHp, attack, defense, xpBonusPct, goldBonusPct, critChancePct };

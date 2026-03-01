@@ -13,8 +13,8 @@
  *
  * Spaces are always revealed to preserve word structure.
  */
-export function generateHint(answer: string, level: number): string {
-  if (level >= 3) return answer;
+export function generateHint(answer: string, level: number, maxLevel: number = 3): string {
+  if (level >= maxLevel) return answer;
   if (answer.length === 0) return "";
 
   const chars = answer.split("");
@@ -35,6 +35,9 @@ export function generateHint(answer: string, level: number): string {
         case 2:
           // Level 2: first letter + every other letter
           return index % 2 === 0 ? char : "_";
+        case 3:
+          // Level 3 (bonus): first letter + 2 of every 3 letters
+          return index % 3 !== 0 ? char : "_";
         default:
           return "_";
       }
@@ -43,17 +46,17 @@ export function generateHint(answer: string, level: number): string {
 }
 
 /**
- * Get the maximum hint level available (always 3).
+ * Get the maximum hint level available (base 3, can be increased by skill tree).
  */
-export function getMaxHintLevel(): number {
-  return 3;
+export function getMaxHintLevel(hintBonus: number = 0): number {
+  return 3 + hintBonus;
 }
 
 /**
  * Check if a hint level reveals the full answer.
  */
-export function isFullReveal(level: number): boolean {
-  return level >= 3;
+export function isFullReveal(level: number, maxLevel: number = 3): boolean {
+  return level >= maxLevel;
 }
 
 /**

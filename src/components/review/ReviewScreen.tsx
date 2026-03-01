@@ -35,6 +35,7 @@ interface Props {
   onComplete: (results: ReviewResult[]) => void;
   mode?: RetrievalMode;
   timerSeconds?: number;
+  hintBonus?: number;
 }
 
 type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate" | "elaboration" | "pretest" | "pretest_reveal";
@@ -74,6 +75,7 @@ export function ReviewScreen({
   onComplete,
   mode = RetrievalMode.Standard,
   timerSeconds: timerSecondsProp = 30,
+  hintBonus = 0,
 }: Props) {
   // Look up evolution tiers for all cards
   const cardTiers = useMemo(() => {
@@ -491,8 +493,8 @@ export function ReviewScreen({
       if (_input === "h" || _input === "H") {
         if (!showHint) {
           setShowHint(true);
-        } else if (!isFullReveal(hintLevel + 1)) {
-          setHintLevel((l) => Math.min(l + 1, getMaxHintLevel()));
+        } else if (!isFullReveal(hintLevel + 1, getMaxHintLevel(hintBonus))) {
+          setHintLevel((l) => Math.min(l + 1, getMaxHintLevel(hintBonus)));
         }
       }
     },
@@ -665,9 +667,9 @@ export function ReviewScreen({
       {!isTeach && phase === "question" && showHint && effectiveCard && (
         <Box marginTop={1}>
           <Text color="cyan">
-            Hint: {generateHint(effectiveCard.back, hintLevel)}
+            Hint: {generateHint(effectiveCard.back, hintLevel, getMaxHintLevel(hintBonus))}
           </Text>
-          {!isFullReveal(hintLevel + 1) ? (
+          {!isFullReveal(hintLevel + 1, getMaxHintLevel(hintBonus)) ? (
             <Text dimColor>  [H] more</Text>
           ) : null}
         </Box>
