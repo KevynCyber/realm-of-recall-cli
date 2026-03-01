@@ -281,7 +281,7 @@
         "Tests pass"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "No export functionality. User data lives in a single SQLite file with no backup mechanism."
     },
     {
