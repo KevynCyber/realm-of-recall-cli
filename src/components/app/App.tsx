@@ -52,6 +52,7 @@ import {
 import { checkNewAchievements } from "../../core/progression/Achievements.js";
 import type { AchievementState } from "../../core/progression/Achievements.js";
 import { interleaveCards } from "../../core/review/Interleaver.js";
+import { selectMode } from "../../core/review/ModeSelector.js";
 import {
   applyAscensionToEnemy,
   applyAscensionToCombat,
@@ -76,7 +77,7 @@ import type {
   Zone,
   ScheduleData,
 } from "../../types/index.js";
-import { AnswerQuality, PlayerClass } from "../../types/index.js";
+import { AnswerQuality, PlayerClass, RetrievalMode } from "../../types/index.js";
 import type { CombatResult } from "../../types/combat.js";
 import type { Enemy } from "../../types/combat.js";
 import type { TrendResult } from "../../core/analytics/MarginalGains.js";
@@ -155,6 +156,10 @@ export default function App() {
   const [reviewXp, setReviewXp] = useState(0);
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
+
+  // Retrieval mode state
+  const [currentRetrievalMode, setCurrentRetrievalMode] = useState<RetrievalMode>(RetrievalMode.Standard);
+  const [sessionModes, setSessionModes] = useState<RetrievalMode[]>([]);
 
   // Achievement state
   const [unlockedAchievementKeys, setUnlockedAchievementKeys] = useState<Set<string>>(new Set());
@@ -335,6 +340,11 @@ export default function App() {
         // Apply ascension modifiers to combat settings
         const settings = applyAscensionToCombat(getDefaultCombatSettings(), player.ascensionLevel);
 
+        // Select retrieval mode for combat
+        const mode = selectMode("review", [], sessionModes);
+        setCurrentRetrievalMode(mode);
+        setSessionModes((prev) => [...prev, mode]);
+
         const equipped = equipRepo.getEquipped();
         setCombatCards(cards);
         setCombatEnemy(enemy);
@@ -345,7 +355,7 @@ export default function App() {
         return false;
       }
     },
-    [player],
+    [player, sessionModes],
   );
 
   const navigateToScreen = useCallback(
@@ -368,6 +378,10 @@ export default function App() {
               .map((id) => cardRepo.getCard(id))
               .filter((c): c is Card => c !== undefined);
             if (cards.length === 0) break;
+            // Select retrieval mode for this review session
+            const mode = selectMode("review", [], sessionModes);
+            setCurrentRetrievalMode(mode);
+            setSessionModes((prev) => [...prev, mode]);
             setCombatCards(cards);
             setReviewResults([]);
             setScreen("review");
@@ -925,6 +939,7 @@ export default function App() {
             equippedItems={equippedItems}
             streakBonusPct={streakBonusPct}
             combatSettings={combatSettings}
+            retrievalMode={currentRetrievalMode}
             onComplete={handleCombatComplete}
           />
         ) : (
@@ -935,6 +950,7 @@ export default function App() {
           <ReviewScreen
             cards={combatCards}
             onComplete={handleReviewComplete}
+            mode={currentRetrievalMode}
           />
         );
       case "review_summary":
