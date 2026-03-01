@@ -154,6 +154,19 @@ export class StatsRepository {
     };
   }
 
+  getAllSchedules(): Array<{ cardId: string; stability: number; lastReview: string | null }> {
+    const rows = this.db
+      .prepare(
+        `SELECT card_id, stability, last_review_at FROM recall_stats WHERE suspended = 0 AND (buried_until IS NULL OR buried_until <= datetime('now'))`,
+      )
+      .all() as any[];
+    return rows.map((r) => ({
+      cardId: r.card_id,
+      stability: r.stability ?? 0,
+      lastReview: r.last_review_at,
+    }));
+  }
+
   getCardEvolutionTier(cardId: string): number {
     const row = this.db
       .prepare(`SELECT evolution_tier FROM recall_stats WHERE card_id = ?`)
