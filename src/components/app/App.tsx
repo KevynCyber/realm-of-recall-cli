@@ -91,6 +91,8 @@ import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents
 import { playBel } from "../../core/ui/TerminalEffects.js";
 import { shouldTriggerOracleTrial, createOracleTrial, scoreOracleTrial, BASE_TRIAL_WXP } from "../../core/combat/OracleTrial.js";
 import type { OracleTrialResult } from "../../core/combat/OracleTrial.js";
+import { investInBranch } from "../../core/progression/SkillTree.js";
+import type { SkillBranch } from "../../core/progression/SkillTree.js";
 import { setTerminalTitle, clearTerminalTitle, notifyBel } from "../../utils/TerminalTitle.js";
 import {
   getBreakLevel,
@@ -1599,6 +1601,31 @@ export default function App() {
                 return undefined;
               }
             })()}
+            onInvestSkill={(branch: SkillBranch) => {
+              try {
+                const allocation = {
+                  recall: player.skillRecall,
+                  battle: player.skillBattle,
+                  scholar: player.skillScholar,
+                };
+                const spent = allocation.recall + allocation.battle + allocation.scholar;
+                const available = player.skillPoints - spent;
+                const result = investInBranch(branch, allocation, available);
+                if (result) {
+                  const db = getDatabase();
+                  const playerRepo = new PlayerRepository(db);
+                  const updated = {
+                    ...player,
+                    skillRecall: result.allocation.recall,
+                    skillBattle: result.allocation.battle,
+                    skillScholar: result.allocation.scholar,
+                  };
+                  playerRepo.updatePlayer(updated);
+                  setPlayer(updated);
+                }
+              } catch (e) { debugLog("App", e);
+              }
+            }}
             avgSkipCost={(() => {
               try {
                 const db = getDatabase();
