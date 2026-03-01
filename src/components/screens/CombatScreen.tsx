@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { Card, CombatResult, Equipment } from "../../types/index.js";
@@ -22,6 +22,9 @@ import { DamageNumber } from "../combat/DamageNumber.js";
 import { FlashcardFace } from "../review/FlashcardFace.js";
 import { useGameTheme } from "../app/ThemeProvider.js";
 import { ReflectionScreen } from "../review/ReflectionScreen.js";
+import { getDatabase } from "../../data/database.js";
+import { StatsRepository } from "../../data/repositories/StatsRepository.js";
+import type { EvolutionTier } from "../../core/cards/CardEvolution.js";
 import {
   selectPrompt,
   shouldShowJournal,
@@ -84,7 +87,23 @@ export function CombatScreen({
   const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
   const unlockedAbilities = getUnlockedAbilities(player.class, player.level);
 
+  // Look up evolution tiers for all cards
+  const cardTiers = useMemo(() => {
+    try {
+      const db = getDatabase();
+      const statsRepo = new StatsRepository(db);
+      const tiers = new Map<string, number>();
+      for (const c of cards) {
+        tiers.set(c.id, statsRepo.getCardEvolutionTier(c.id));
+      }
+      return tiers;
+    } catch {
+      return new Map<string, number>();
+    }
+  }, [cards]);
+
   const currentCard = cards[combat.currentCardIndex] ?? null;
+  const currentTier = currentCard ? (cardTiers.get(currentCard.id) ?? 0) : 0;
   const totalTime = 30; // seconds per card
 
   // -- Intro phase: show enemy appearance message, then transition to card --
@@ -173,6 +192,9 @@ export function CombatScreen({
         attackPower,
         stats.defense,
         critChance,
+        undefined,
+        undefined,
+        currentTier,
       );
 
       // Check if we should absorb damage
@@ -203,7 +225,7 @@ export function CombatScreen({
 
       setPhase("resolve");
     },
-    [currentCard, cardStart, combat, stats, activeEffects],
+    [currentCard, cardStart, combat, stats, activeEffects, currentTier],
   );
 
   // -- Handle [A] key to open ability menu during card phase --
@@ -485,7 +507,7 @@ export function CombatScreen({
       {/* Middle: Card content */}
       {phase === "card" && currentCard && (
         <>
-          <FlashcardFace card={currentCard} showAnswer={false} />
+          <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} />
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />

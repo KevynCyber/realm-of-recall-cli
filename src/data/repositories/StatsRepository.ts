@@ -161,6 +161,31 @@ export class StatsRepository {
     return row ? row.evolution_tier : 0;
   }
 
+  getCardEvolutionStats(cardId: string): {
+    consecutiveCorrect: number;
+    currentTier: number;
+    fsrsState: string;
+    stability: number;
+    lapses: number;
+  } {
+    const row = this.db
+      .prepare(
+        `SELECT consecutive_correct, evolution_tier, card_state, stability, lapses
+         FROM recall_stats WHERE card_id = ?`,
+      )
+      .get(cardId) as any | undefined;
+    if (!row) {
+      return { consecutiveCorrect: 0, currentTier: 0, fsrsState: "new", stability: 0, lapses: 0 };
+    }
+    return {
+      consecutiveCorrect: row.consecutive_correct,
+      currentTier: row.evolution_tier,
+      fsrsState: row.card_state,
+      stability: row.stability,
+      lapses: row.lapses,
+    };
+  }
+
   getCardGapStreak(cardId: string): number {
     const row = this.db
       .prepare(`SELECT gap_streak FROM recall_stats WHERE card_id = ?`)

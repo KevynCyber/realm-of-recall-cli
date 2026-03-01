@@ -44,6 +44,8 @@ import {
   generateCPJReframe,
   shouldShowCPJ,
 } from "../../core/reflection/ReflectionEngine.js";
+import { evaluateEvolutionTier } from "../../core/cards/CardEvolution.js";
+import type { EvolutionTier } from "../../core/cards/CardEvolution.js";
 import {
   calculateTrend,
 } from "../../core/analytics/MarginalGains.js";
@@ -582,6 +584,18 @@ export default function App() {
           const existing = statsRepo.getSchedule(card.id);
           const schedule: ScheduleData = existing ?? createInitialSchedule(card.id);
           const updatedSchedule = updateSchedule(schedule, quality);
+
+          // Compute evolution tier
+          const evoStats = statsRepo.getCardEvolutionStats(card.id);
+          const newConsecutive = result.victory ? evoStats.consecutiveCorrect + 1 : 0;
+          const tier = evaluateEvolutionTier(
+            newConsecutive,
+            evoStats.currentTier as EvolutionTier,
+            updatedSchedule.state,
+            updatedSchedule.stability,
+            evoStats.lapses,
+          );
+
           statsRepo.recordAttempt(
             card.id,
             {
@@ -592,6 +606,7 @@ export default function App() {
               wasTimed: false,
             },
             updatedSchedule,
+            tier,
           );
         }
 
@@ -655,6 +670,22 @@ export default function App() {
             result.quality,
             result.confidence,
           );
+
+          // Compute evolution tier
+          const evoStats = statsRepo.getCardEvolutionStats(result.cardId);
+          const isCorrect =
+            result.quality === AnswerQuality.Perfect ||
+            result.quality === AnswerQuality.Correct ||
+            result.quality === AnswerQuality.Partial;
+          const newConsecutive = isCorrect ? evoStats.consecutiveCorrect + 1 : 0;
+          const tier = evaluateEvolutionTier(
+            newConsecutive,
+            evoStats.currentTier as EvolutionTier,
+            updatedSchedule.state,
+            updatedSchedule.stability,
+            evoStats.lapses,
+          );
+
           statsRepo.recordAttempt(
             result.cardId,
             {
@@ -668,6 +699,7 @@ export default function App() {
               responseText: result.responseText,
             },
             updatedSchedule,
+            tier,
           );
         }
 
