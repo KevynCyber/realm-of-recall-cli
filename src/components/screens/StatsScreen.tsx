@@ -20,11 +20,15 @@ interface FsrsStats {
   relearnCount: number;
 }
 
+/** Valid desired retention presets */
+const RETENTION_PRESETS = [0.70, 0.75, 0.80, 0.85, 0.90, 0.92, 0.95, 0.97] as const;
+
 interface Props {
   player: Player;
   deckStats: DeckStat[];
   fsrsStats: FsrsStats;
   onBack: () => void;
+  onUpdateRetention?: (retention: number) => void;
   // Ultra-learner props (all optional for backward compat)
   accuracyTrend?: TrendResult;
   speedTrend?: TrendResult;
@@ -50,6 +54,7 @@ export function StatsScreen({
   deckStats,
   fsrsStats,
   onBack,
+  onUpdateRetention,
   accuracyTrend,
   speedTrend,
   consistencyGrid,
@@ -60,6 +65,18 @@ export function StatsScreen({
   useInput((input, key) => {
     if (key.escape || input === "b") {
       onBack();
+      return;
+    }
+
+    // Handle retention preset selection (keys 1-8)
+    if (onUpdateRetention) {
+      const num = parseInt(input, 10);
+      if (num >= 1 && num <= RETENTION_PRESETS.length) {
+        const newRetention = RETENTION_PRESETS[num - 1];
+        if (newRetention !== player.desiredRetention) {
+          onUpdateRetention(newRetention);
+        }
+      }
     }
   });
 
@@ -196,10 +213,42 @@ export function StatsScreen({
         </Box>
       )}
 
+      {/* Section 9 — Settings: Desired Retention */}
+      {onUpdateRetention && (
+        <Box borderStyle="single" borderColor={theme.colors.muted} flexDirection="column" paddingX={1} marginBottom={1}>
+          <Text bold color={theme.colors.rare}>
+            Settings: Desired Retention
+          </Text>
+          <Text color={theme.colors.muted}>
+            Higher = more frequent reviews, stronger memory. Lower = fewer reviews, more forgetting.
+          </Text>
+          <Text>
+            Current: <Text bold color={theme.colors.success}>{(player.desiredRetention * 100).toFixed(0)}%</Text>
+          </Text>
+          <Box marginTop={1} flexDirection="column">
+            {RETENTION_PRESETS.map((preset, i) => {
+              const isActive = preset === player.desiredRetention;
+              return (
+                <Text key={preset}>
+                  <Text bold={isActive} color={isActive ? theme.colors.success : undefined}>
+                    {isActive ? "> " : "  "}[{i + 1}] {(preset * 100).toFixed(0)}%
+                    {preset === 0.90 ? " (default)" : ""}
+                    {isActive ? " *" : ""}
+                  </Text>
+                </Text>
+              );
+            })}
+          </Box>
+        </Box>
+      )}
+
       {/* Navigation hint */}
       <Box paddingX={1}>
         <Text color={theme.colors.muted}>
           Press <Text bold>Esc</Text> or <Text bold>b</Text> to go back
+          {onUpdateRetention ? (
+            <Text>{" | "}<Text bold>1-8</Text> to change retention</Text>
+          ) : null}
         </Text>
       </Box>
     </Box>

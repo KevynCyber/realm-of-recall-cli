@@ -231,4 +231,8 @@ const migrations = [
       );
     `,
   },
+  {
+    name: "006_desired_retention",
+    sql: `ALTER TABLE player ADD COLUMN desired_retention REAL NOT NULL DEFAULT 0.9;`,
+  },
 ];
