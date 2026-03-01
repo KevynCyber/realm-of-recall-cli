@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useApp, useInput } from "ink";
+import TextInput from "ink-text-input";
 import { ThemeProvider } from "./ThemeProvider.js";
 import { Header } from "./Header.js";
 import { StatusBar } from "./StatusBar.js";
@@ -88,6 +89,8 @@ import {
 } from "../../core/combat/DailyChallenge.js";
 import { rollForEvent, resolveEventChoice } from "../../core/combat/RandomEvents.js";
 import { playBel } from "../../core/ui/TerminalEffects.js";
+import { shouldTriggerOracleTrial, createOracleTrial, scoreOracleTrial, BASE_TRIAL_WXP } from "../../core/combat/OracleTrial.js";
+import type { OracleTrialResult } from "../../core/combat/OracleTrial.js";
 import { setTerminalTitle, clearTerminalTitle, notifyBel } from "../../utils/TerminalTitle.js";
 import {
   getBreakLevel,
@@ -131,7 +134,8 @@ export type Screen =
   | "dungeon"
   | "random_event"
   | "create_cards"
-  | "bestiary";
+  | "bestiary"
+  | "oracle_trial";
 
 interface NavigationContextValue {
   navigate: (screen: Screen) => void;
@@ -214,6 +218,12 @@ export default function App() {
   const [leveledUp, setLeveledUp] = useState(false);
   const [newLevel, setNewLevel] = useState(0);
   const [sessionNewVariants, setSessionNewVariants] = useState<Array<{ cardId: string; variant: "foil" | "golden" | "prismatic" }>>([]);
+
+  // Oracle's Trial state
+  const [oraclePrediction, setOraclePrediction] = useState<number | null>(null);
+  const [oracleCardCount, setOracleCardCount] = useState(0);
+  const [oracleTrialResult, setOracleTrialResult] = useState<OracleTrialResult | null>(null);
+  const [lastOracleTrialSession, setLastOracleTrialSession] = useState(0);
 
   // Retrieval mode state
   const [currentRetrievalMode, setCurrentRetrievalMode] = useState<RetrievalMode>(RetrievalMode.Standard);
@@ -569,7 +579,17 @@ export default function App() {
             setSessionModes((prev) => [...prev, mode]);
             setCombatCards(cards);
             setReviewResults([]);
-            setScreen("review");
+            // Check for Oracle's Trial
+            const sessionsCompleted = (player?.combatWins ?? 0) + (player?.combatLosses ?? 0) + (player?.totalReviews ?? 0);
+            if (shouldTriggerOracleTrial(sessionsCompleted, lastOracleTrialSession)) {
+              setOracleCardCount(cards.length);
+              setOraclePrediction(null);
+              setOracleTrialResult(null);
+              setLastOracleTrialSession(sessionsCompleted);
+              setScreen("oracle_trial");
+            } else {
+              setScreen("review");
+            }
           } catch (e) { debugLog("App", e);
           }
           break;
@@ -1112,6 +1132,25 @@ export default function App() {
           setShowBreakScreen(true);
         }
 
+        // Score Oracle's Trial if active
+        if (oraclePrediction !== null) {
+          const actualCorrect = results.filter(
+            (r) =>
+              r.quality === AnswerQuality.Perfect ||
+              r.quality === AnswerQuality.Correct,
+          ).length;
+          const trialResult = scoreOracleTrial(oraclePrediction, actualCorrect, oracleCardCount);
+          setOracleTrialResult(trialResult);
+          // Award bonus wisdom XP
+          const trialWxp = Math.floor(BASE_TRIAL_WXP * trialResult.wxpMultiplier);
+          const withTrialWxp = { ...updated, wisdomXp: updated.wisdomXp + trialWxp };
+          playerRepo.updatePlayer(withTrialWxp);
+          setPlayer(withTrialWxp);
+          setOraclePrediction(null);
+        } else {
+          setOracleTrialResult(null);
+        }
+
         setScreen("review_summary");
       } catch (err: any) {
         console.error("Error saving review results:", err.message);
@@ -1302,7 +1341,8 @@ export default function App() {
       screen === "reflection" ||
       screen === "dungeon" ||
       screen === "random_event" ||
-      screen === "create_cards"
+      screen === "create_cards" ||
+      screen === "oracle_trial"
     )
       return;
     if (input === "q") {
@@ -1369,6 +1409,16 @@ export default function App() {
         ) : (
           <Text>Loading combat...</Text>
         );
+      case "oracle_trial":
+        return (
+          <OracleTrialPrompt
+            cardCount={oracleCardCount}
+            onPredict={(prediction) => {
+              setOraclePrediction(prediction);
+              setScreen("review");
+            }}
+          />
+        );
       case "review":
         return (
           <ReviewScreen
@@ -1392,6 +1442,16 @@ export default function App() {
               retentionBonusCards={retentionBonusCards}
               newVariants={sessionNewVariants}
             />
+            {oracleTrialResult && (
+              <Box flexDirection="column" borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} marginTop={1}>
+                <Text bold color="magenta">{"Oracle's Trial Result"}</Text>
+                <Text>Predicted: {oracleTrialResult.predicted} | Actual: {oracleTrialResult.actual}</Text>
+                <Text bold color={oracleTrialResult.tier === "seer" ? "green" : oracleTrialResult.tier === "adept" ? "cyan" : "yellow"}>
+                  Rank: {oracleTrialResult.tier.charAt(0).toUpperCase() + oracleTrialResult.tier.slice(1)} ({oracleTrialResult.wxpMultiplier}x WXP)
+                </Text>
+                <Text dimColor italic>{oracleTrialResult.message}</Text>
+              </Box>
+            )}
             <Box marginTop={1} justifyContent="center">
               <Text dimColor italic>
                 Press Enter to continue...
@@ -1782,5 +1842,39 @@ export default function App() {
         </Box>
       </NavigationContext.Provider>
     </ThemeProvider>
+  );
+}
+
+// ── Inline sub-component: Oracle's Trial prediction prompt ───────────────
+function OracleTrialPrompt({ cardCount, onPredict }: { cardCount: number; onPredict: (prediction: number) => void }) {
+  const [input, setInput] = useState("");
+  useInput((_input, key) => {
+    if (key.return && input.trim()) {
+      const num = parseInt(input.trim(), 10);
+      if (!isNaN(num) && num >= 0 && num <= cardCount) {
+        onPredict(num);
+      }
+    }
+  });
+  return (
+    <Box flexDirection="column" paddingX={2} paddingY={1}>
+      <Box borderStyle="round" borderColor="magenta" paddingX={2} paddingY={1} flexDirection="column">
+        <Text bold color="magenta">Oracle{"'"}s Trial</Text>
+        <Text> </Text>
+        <Text>You will review <Text bold>{cardCount}</Text> cards.</Text>
+        <Text>How many will you answer correctly?</Text>
+        <Text> </Text>
+        <Box>
+          <Text bold>Your prediction: </Text>
+          <TextInput value={input} onChange={setInput} onSubmit={() => {
+            const num = parseInt(input.trim(), 10);
+            if (!isNaN(num) && num >= 0 && num <= cardCount) {
+              onPredict(num);
+            }
+          }} />
+        </Box>
+        <Text dimColor italic>Enter a number between 0 and {cardCount}</Text>
+      </Box>
+    </Box>
   );
 }
