@@ -46,6 +46,7 @@ import {
   canUseAbility,
   getAbilityEffect,
   tickCooldowns,
+  getSkillPointsForLevel,
 } from "../../core/player/ClassAbilities.js";
 import type { ClassAbility, ActiveAbility, AbilityEffect } from "../../core/player/ClassAbilities.js";
 import type { CombatSettings } from "../../core/progression/AscensionSystem.js";
@@ -132,7 +133,7 @@ export function CombatScreen({
   const [cardResults, setCardResults] = useState<CombatCardResult[]>([]);
 
   // Ability state
-  const [currentSp, setCurrentSp] = useState(player.skillPoints);
+  const [currentSp, setCurrentSp] = useState(getSkillPointsForLevel(player.level));
   const [activeAbilities, setActiveAbilities] = useState<ActiveAbility[]>([]);
   const [activeEffects, setActiveEffects] = useState<AbilityEffect[]>([]);
   const [abilityMessage, setAbilityMessage] = useState<string | null>(null);
