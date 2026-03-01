@@ -186,7 +186,7 @@
         "Tests pass"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "No undo mechanism exists. Mis-presses or accidental submits corrupt scheduling data permanently."
     },
     {
