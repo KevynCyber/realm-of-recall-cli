@@ -856,6 +856,13 @@ export default function App() {
           : baseReviewXp;
         updated = { ...updated, xp: updated.xp + xpGained };
 
+        // Award bonus Wisdom XP for elaborative interrogation explanations (15 per explanation)
+        const elaborationCount = results.filter((r) => r.elaborationText).length;
+        if (elaborationCount > 0) {
+          const elaborationWisdomXp = elaborationCount * 15;
+          updated = { ...updated, wisdomXp: updated.wisdomXp + elaborationWisdomXp };
+        }
+
         const prevLevel = updated.level;
         updated = applyLevelUp(updated);
 

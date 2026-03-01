@@ -318,7 +318,7 @@
         "Tests pass"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Dunlosky et al. (2013) rated elaborative interrogation as 'moderate' utility. Works best for review-stage cards where learner has prior knowledge."
     },
     {

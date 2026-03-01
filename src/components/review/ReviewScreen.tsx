@@ -23,6 +23,7 @@ export interface ReviewResult {
   confidence?: ConfidenceLevel;
   retrievalMode?: RetrievalMode;
   responseText?: string;
+  elaborationText?: string;
 }
 
 interface Props {
@@ -32,7 +33,20 @@ interface Props {
   timerSeconds?: number;
 }
 
-type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate";
+type Phase = "question" | "answer" | "feedback" | "confidence" | "teach_rate" | "elaboration";
+
+/** Exported for testing — override in tests via dependency injection. */
+export let _rollElaboration = (): boolean => Math.random() < 0.3;
+
+const ELABORATION_PROMPTS = [
+  (answer: string) => `Why is "${answer}" correct?`,
+  () => "How does this connect to what you know?",
+];
+
+function pickElaborationPrompt(answer: string): string {
+  const idx = Math.floor(Math.random() * ELABORATION_PROMPTS.length);
+  return ELABORATION_PROMPTS[idx](answer);
+}
 
 /**
  * Build a display card that swaps front/back for reversed mode and merges
@@ -112,6 +126,9 @@ export function ReviewScreen({
   // Undo support: tracks whether the current card was reached via undo (prevent double undo)
   const [undoUsed, setUndoUsed] = useState(false);
   const [undoMsg, setUndoMsg] = useState<string | null>(null);
+  // Elaboration prompt state
+  const [elaborationPrompt, setElaborationPrompt] = useState<string>("");
+  const [elaborationInput, setElaborationInput] = useState("");
 
   const card = cardQueue[currentIndex];
   const totalTime = timerSecondsProp === 0 ? Infinity : timerSecondsProp; // 0 = disabled
@@ -187,6 +204,8 @@ export function ReviewScreen({
         setHintLevel(0);
         setShowHint(false);
         setUndoUsed(false);
+        setElaborationInput("");
+        setElaborationPrompt("");
       }
     },
     [cardQueue.length, currentIndex, onComplete, card, lastQuality, requeueCard],
@@ -268,8 +287,16 @@ export function ReviewScreen({
           (lastQuality === AnswerQuality.Perfect ||
             lastQuality === AnswerQuality.Correct)
         ) {
-          // Transition to confidence phase instead of advancing
-          setPhase("confidence");
+          // Check for elaboration prompt: tier >= 1 and 30% chance
+          const tier = card ? (cardTiers.get(card.id) ?? 0) : 0;
+          if (tier >= 1 && _rollElaboration()) {
+            const prompt = pickElaborationPrompt(effectiveCard?.back ?? "");
+            setElaborationPrompt(prompt);
+            setElaborationInput("");
+            setPhase("elaboration");
+          } else {
+            setPhase("confidence");
+          }
         } else {
           advanceCard();
         }
@@ -328,6 +355,29 @@ export function ReviewScreen({
       }
     },
     { isActive: phase === "teach_rate" },
+  );
+
+  // Elaboration phase — user submits explanation (or presses Enter to skip)
+  const handleElaborationSubmit = useCallback(
+    (text: string) => {
+      const trimmed = text.trim();
+      if (trimmed) {
+        // Store elaboration text on the result
+        setResults((prev) => {
+          const updated = [...prev];
+          if (updated.length > 0) {
+            updated[updated.length - 1] = {
+              ...updated[updated.length - 1],
+              responseText: trimmed,
+              elaborationText: trimmed,
+            };
+          }
+          return updated;
+        });
+      }
+      setPhase("confidence");
+    },
+    [],
   );
 
   // Hint key handler — press H during question phase to reveal progressive hints
@@ -404,7 +454,7 @@ export function ReviewScreen({
 
   const progress =
     (currentIndex +
-      (phase === "feedback" || phase === "confidence" || phase === "teach_rate"
+      (phase === "feedback" || phase === "confidence" || phase === "teach_rate" || phase === "elaboration"
         ? 1
         : 0)) /
     cardQueue.length;
@@ -438,7 +488,8 @@ export function ReviewScreen({
           card={effectiveCard}
           showAnswer={
             phase === "feedback" ||
-            phase === "confidence"
+            phase === "confidence" ||
+            phase === "elaboration"
           }
           evolutionTier={cardTiers.get(card.id) ?? 0}
           cardHealth={cardHealthMap.get(card.id) ?? "healthy"}
@@ -524,6 +575,22 @@ export function ReviewScreen({
           <Text dimColor italic>
             Press Enter to continue...{!undoUsed ? " [U] undo" : ""}
           </Text>
+        </Box>
+      )}
+
+      {/* Elaboration prompt */}
+      {phase === "elaboration" && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold color="magenta">{elaborationPrompt}</Text>
+          <Box>
+            <Text bold>Your explanation: </Text>
+            <TextInput
+              value={elaborationInput}
+              onChange={setElaborationInput}
+              onSubmit={handleElaborationSubmit}
+            />
+          </Box>
+          <Text dimColor italic>Type your explanation or press Enter to skip (+15 Wisdom XP)</Text>
         </Box>
       )}
 
