@@ -7,6 +7,7 @@ interface Props {
   streakAtRisk: boolean;
   newCardsRemaining: number;
   idleBanner?: string | null;
+  newUnlockName?: string | null;
   onNavigate: (screen: string) => void;
 }
 
@@ -24,7 +25,7 @@ const MENU_ITEMS = [
   { key: "b", label: "Bestiary", description: "Enemy encounters and collection", screen: "bestiary" },
 ] as const;
 
-export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanner, onNavigate }: Props) {
+export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanner, newUnlockName, onNavigate }: Props) {
   const theme = useGameTheme();
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -49,6 +50,13 @@ export function HubScreen({ cardsDue, streakAtRisk, newCardsRemaining, idleBanne
       {idleBanner && (
         <Box paddingX={1} marginBottom={1}>
           <Text color={theme.colors.gold}>{idleBanner}</Text>
+        </Box>
+      )}
+      {newUnlockName && (
+        <Box paddingX={1} marginBottom={1}>
+          <Text bold color="magenta">
+            New Unlock! {newUnlockName}
+          </Text>
         </Box>
       )}
       <Box borderStyle="round" flexDirection="column" paddingX={1}>

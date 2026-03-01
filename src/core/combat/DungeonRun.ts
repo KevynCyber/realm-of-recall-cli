@@ -21,7 +21,7 @@ export interface FloorConfig {
   isBoss: boolean;
 }
 
-const FLOOR_CONFIGS: FloorConfig[] = [
+const BASE_FLOOR_CONFIGS: FloorConfig[] = [
   { floor: 1, enemyHpMultiplier: 1.0, rewardMultiplier: 1.0, isBoss: false },
   { floor: 2, enemyHpMultiplier: 1.2, rewardMultiplier: 1.25, isBoss: false },
   { floor: 3, enemyHpMultiplier: 1.5, rewardMultiplier: 1.5, isBoss: false },
@@ -29,16 +29,38 @@ const FLOOR_CONFIGS: FloorConfig[] = [
   { floor: 5, enemyHpMultiplier: 3.0, rewardMultiplier: 3.0, isBoss: true },
 ];
 
+const EXTENDED_FLOOR_CONFIGS: FloorConfig[] = [
+  { floor: 6, enemyHpMultiplier: 3.5, rewardMultiplier: 3.5, isBoss: false },
+  { floor: 7, enemyHpMultiplier: 4.0, rewardMultiplier: 4.0, isBoss: false },
+  { floor: 8, enemyHpMultiplier: 5.0, rewardMultiplier: 5.0, isBoss: true },
+];
+
+/**
+ * Get the floor configs for a dungeon run, optionally including extended floors 6-8.
+ */
+export function getFloorConfigs(extendedDungeon: boolean = false): FloorConfig[] {
+  if (extendedDungeon) {
+    // When extended, floor 5 is no longer the boss — floor 8 is
+    const adjusted = BASE_FLOOR_CONFIGS.map((f) =>
+      f.floor === 5 ? { ...f, isBoss: false } : f,
+    );
+    return [...adjusted, ...EXTENDED_FLOOR_CONFIGS];
+  }
+  return [...BASE_FLOOR_CONFIGS];
+}
+
 /**
  * Create a new dungeon run.
+ * @param extendedDungeon When true (requires 'extended_dungeon' unlock), includes floors 6-8.
  */
 export function createDungeonRun(
   playerHp: number,
   playerMaxHp: number,
+  extendedDungeon: boolean = false,
 ): DungeonRunState {
   return {
     currentFloor: 1,
-    maxFloors: 5,
+    maxFloors: extendedDungeon ? 8 : 5,
     playerHp,
     playerMaxHp,
     totalGoldEarned: 0,
@@ -52,10 +74,12 @@ export function createDungeonRun(
 
 /**
  * Get the configuration for the current floor.
+ * @param extendedDungeon Whether to include floors 6-8 in the config lookup.
  */
-export function getCurrentFloorConfig(run: DungeonRunState): FloorConfig {
-  const index = Math.min(run.currentFloor - 1, FLOOR_CONFIGS.length - 1);
-  return FLOOR_CONFIGS[index];
+export function getCurrentFloorConfig(run: DungeonRunState, extendedDungeon: boolean = false): FloorConfig {
+  const configs = getFloorConfigs(extendedDungeon);
+  const index = Math.min(run.currentFloor - 1, configs.length - 1);
+  return configs[index];
 }
 
 /**
