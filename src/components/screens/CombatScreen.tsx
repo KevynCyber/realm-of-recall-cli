@@ -319,9 +319,11 @@ export function CombatScreen({
         setRewards({ xp: 0, gold: 0 });
         // Select a lore fragment for defeat
         const lore = selectLore(enemy.tier, seenLoreIds ?? new Set());
-        setDefeatLore(lore);
-        if (onLoreSeen) {
-          onLoreSeen(lore.id);
+        if (lore) {
+          setDefeatLore(lore);
+          if (onLoreSeen) {
+            onLoreSeen(lore.id);
+          }
         }
       }
       setPhase("result");
