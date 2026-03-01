@@ -37,6 +37,7 @@ const testPlayer: Player = {
   desiredRetention: 0.9,
   maxNewCardsPerDay: 20,
   timerSeconds: 30,
+  lastLoginAt: null,
   createdAt: new Date().toISOString(),
 };
 

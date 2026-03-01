@@ -250,4 +250,8 @@ const migrations = [
     name: "009_timer_seconds",
     sql: `ALTER TABLE player ADD COLUMN timer_seconds INTEGER NOT NULL DEFAULT 30;`,
   },
+  {
+    name: "010_last_login_at",
+    sql: `ALTER TABLE player ADD COLUMN last_login_at TEXT;`,
+  },
 ];
