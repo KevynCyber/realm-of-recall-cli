@@ -664,7 +664,8 @@ export default function App() {
 
         // Update streak
         const today = getTodayUTC();
-        let updated = updateStreak(player, today);
+        const streakResult = updateStreak(player, today);
+        let updated = streakResult.player;
 
         // Compute retention multiplier bonus for combat cards
         let combatRetentionXpBonus = 0;
@@ -812,7 +813,8 @@ export default function App() {
 
         // Update streak
         const today = getTodayUTC();
-        let updated = updateStreak(player, today);
+        const streakResult = updateStreak(player, today);
+        let updated = streakResult.player;
 
         // Count correct answers
         const correctCount = results.filter(

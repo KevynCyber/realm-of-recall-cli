@@ -352,7 +352,7 @@
         "Tests pass"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": "Research: breaking streaks increases binge-quit behavior by 47% (Cohorty). Duolingo's streak freeze increased weekly retention 4-5%. Decay model is strictly better than hard reset for retention."
     },
     {
