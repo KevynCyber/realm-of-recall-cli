@@ -157,7 +157,7 @@ export default function App() {
     relearnCount: 0,
   });
   const [deckData, setDeckData] = useState<
-    Array<{ deck: Deck; cardCount: number; dueCount: number }>
+    Array<{ deck: Deck; cardCount: number; dueCount: number; suspendedCount: number }>
   >([]);
   const [reviewResults, setReviewResults] = useState<ReviewResult[]>([]);
   const [reviewXp, setReviewXp] = useState(0);
@@ -532,6 +532,7 @@ export default function App() {
               deck,
               cardCount: cardRepo.getCardCount(deck.id),
               dueCount: statsRepo.getDueCardIds(deck.id).length,
+              suspendedCount: statsRepo.getSuspendedCount(deck.id),
             }));
             setDeckData(infos);
             setScreen("decks");
@@ -911,6 +912,30 @@ export default function App() {
           deck,
           cardCount: cardRepo.getCardCount(deck.id),
           dueCount: statsRepo.getDueCardIds(deck.id).length,
+          suspendedCount: statsRepo.getSuspendedCount(deck.id),
+        }));
+        setDeckData(infos);
+        refreshCardsDue();
+      } catch {
+        // ignore
+      }
+    },
+    [refreshCardsDue],
+  );
+
+  const handleUnsuspendAll = useCallback(
+    (deckId: string) => {
+      try {
+        const db = getDatabase();
+        const cardRepo = new CardRepository(db);
+        const statsRepo = new StatsRepository(db);
+        statsRepo.unsuspendAll(deckId);
+        const allDecks = cardRepo.getAllDecks();
+        const infos = allDecks.map((deck) => ({
+          deck,
+          cardCount: cardRepo.getCardCount(deck.id),
+          dueCount: statsRepo.getDueCardIds(deck.id).length,
+          suspendedCount: statsRepo.getSuspendedCount(deck.id),
         }));
         setDeckData(infos);
         refreshCardsDue();
@@ -1076,6 +1101,7 @@ export default function App() {
           <DeckScreen
             decks={deckData}
             onToggle={handleToggleDeck}
+            onUnsuspendAll={handleUnsuspendAll}
             onBack={() => setScreen("hub")}
           />
         );
