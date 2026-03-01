@@ -73,5 +73,6 @@ export interface Player {
   dailyChallengeCompleted: boolean;
   dailyChallengeScore: number;
   dailyChallengeDate: string | null;
+  desiredRetention: number;
   createdAt: string;
 }

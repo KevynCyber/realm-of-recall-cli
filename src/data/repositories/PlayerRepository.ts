@@ -36,6 +36,7 @@ export class PlayerRepository {
       dailyChallengeCompleted: !!(row.daily_challenge_completed ?? 0),
       dailyChallengeScore: row.daily_challenge_score ?? 0,
       dailyChallengeDate: row.daily_challenge_date ?? null,
+      desiredRetention: row.desired_retention ?? 0.9,
       createdAt: row.created_at,
     };
   }
@@ -47,8 +48,8 @@ export class PlayerRepository {
           streak_days, longest_streak, last_review_date, shield_count,
           total_reviews, total_correct, combat_wins, combat_losses, wisdom_xp,
           ascension_level, skill_points, daily_challenge_seed, daily_challenge_completed,
-          daily_challenge_score, daily_challenge_date, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          daily_challenge_score, daily_challenge_date, desired_retention, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         player.id,
@@ -76,6 +77,7 @@ export class PlayerRepository {
         player.dailyChallengeCompleted ? 1 : 0,
         player.dailyChallengeScore,
         player.dailyChallengeDate,
+        player.desiredRetention,
         player.createdAt,
       );
   }
@@ -89,7 +91,8 @@ export class PlayerRepository {
           last_review_date = ?, shield_count = ?, total_reviews = ?, total_correct = ?,
           combat_wins = ?, combat_losses = ?, wisdom_xp = ?, ascension_level = ?,
           skill_points = ?, daily_challenge_seed = ?, daily_challenge_completed = ?,
-          daily_challenge_score = ?, daily_challenge_date = ?, created_at = ?
+          daily_challenge_score = ?, daily_challenge_date = ?, desired_retention = ?,
+          created_at = ?
          WHERE id = 1`,
       )
       .run(
@@ -117,6 +120,7 @@ export class PlayerRepository {
         player.dailyChallengeCompleted ? 1 : 0,
         player.dailyChallengeScore,
         player.dailyChallengeDate,
+        player.desiredRetention,
         player.createdAt,
       );
   }

@@ -74,6 +74,7 @@ export function createNewPlayer(name: string, playerClass: PlayerClass): Player 
     dailyChallengeCompleted: false,
     dailyChallengeScore: 0,
     dailyChallengeDate: null,
+    desiredRetention: 0.9,
     createdAt: new Date().toISOString(),
   };
 }

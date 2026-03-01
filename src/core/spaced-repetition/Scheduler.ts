@@ -64,8 +64,27 @@ const STRING_TO_STATE: Record<ScheduleData["state"], State> = {
   relearning: State.Relearning,
 };
 
-// Module-level FSRS instance with fuzz enabled
-const f = fsrs(generatorParameters({ enable_fuzz: true }));
+// Default FSRS instance with fuzz enabled (retention 0.9)
+const defaultFsrs = fsrs(generatorParameters({ enable_fuzz: true }));
+
+/**
+ * Create an FSRS instance with a specific desired retention.
+ * Caches instances to avoid re-creating for the same value.
+ */
+const fsrsCache = new Map<number, ReturnType<typeof fsrs>>();
+
+function getFsrsInstance(desiredRetention?: number): ReturnType<typeof fsrs> {
+  if (desiredRetention === undefined || desiredRetention === 0.9) {
+    return defaultFsrs;
+  }
+  const cached = fsrsCache.get(desiredRetention);
+  if (cached) return cached;
+  const instance = fsrs(
+    generatorParameters({ enable_fuzz: true, request_retention: desiredRetention }),
+  );
+  fsrsCache.set(desiredRetention, instance);
+  return instance;
+}
 
 export function createInitialSchedule(cardId: string): ScheduleData {
   const now = new Date();
@@ -85,9 +104,11 @@ export function updateSchedule(
   schedule: ScheduleData,
   quality: AnswerQuality,
   confidence?: ConfidenceLevel,
+  desiredRetention?: number,
 ): ScheduleData {
   const rating = getEffectiveRating(quality, confidence);
   const now = new Date();
+  const f = getFsrsInstance(desiredRetention);
 
   // Reconstruct a ts-fsrs Card from our ScheduleData
   const card: FSRSCard = {
@@ -152,5 +173,5 @@ export function getRetrievability(schedule: ScheduleData): number {
       : undefined,
   };
 
-  return f.get_retrievability(card, new Date(), false);
+  return defaultFsrs.get_retrievability(card, new Date(), false);
 }

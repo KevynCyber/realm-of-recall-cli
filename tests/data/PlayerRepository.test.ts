@@ -34,6 +34,7 @@ const testPlayer: Player = {
   dailyChallengeCompleted: false,
   dailyChallengeScore: 0,
   dailyChallengeDate: null,
+  desiredRetention: 0.9,
   createdAt: new Date().toISOString(),
 };
 
@@ -96,5 +97,24 @@ describe("PlayerRepository", () => {
     playerRepo.removeGold(999);
     const player = playerRepo.getPlayer();
     expect(player!.gold).toBe(0);
+  });
+
+  it("persists desiredRetention with default value", () => {
+    playerRepo.createPlayer(testPlayer);
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.9);
+  });
+
+  it("persists custom desiredRetention value", () => {
+    playerRepo.createPlayer({ ...testPlayer, desiredRetention: 0.85 });
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.85);
+  });
+
+  it("updates desiredRetention", () => {
+    playerRepo.createPlayer(testPlayer);
+    playerRepo.updatePlayer({ ...testPlayer, desiredRetention: 0.95 });
+    const player = playerRepo.getPlayer();
+    expect(player!.desiredRetention).toBe(0.95);
   });
 });

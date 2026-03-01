@@ -620,7 +620,7 @@ export default function App() {
         for (const card of combatCards.slice(0, result.cardsReviewed)) {
           const existing = statsRepo.getSchedule(card.id);
           const schedule: ScheduleData = existing ?? createInitialSchedule(card.id);
-          const updatedSchedule = updateSchedule(schedule, quality);
+          const updatedSchedule = updateSchedule(schedule, quality, undefined, player?.desiredRetention);
 
           // Compute evolution tier
           const evoStats = statsRepo.getCardEvolutionStats(card.id);
@@ -731,6 +731,7 @@ export default function App() {
             schedule,
             result.quality,
             result.confidence,
+            player?.desiredRetention,
           );
 
           // Compute evolution tier
@@ -1075,6 +1076,17 @@ export default function App() {
             deckStats={deckStats}
             fsrsStats={fsrsStats}
             onBack={() => setScreen("hub")}
+            onUpdateRetention={(retention: number) => {
+              try {
+                const db = getDatabase();
+                const playerRepo = new PlayerRepository(db);
+                const updated = { ...player, desiredRetention: retention };
+                playerRepo.updatePlayer(updated);
+                setPlayer(updated);
+              } catch {
+                // ignore
+              }
+            }}
             accuracyTrend={accuracyTrend}
             speedTrend={speedTrend}
             wisdomXp={player.wisdomXp}
