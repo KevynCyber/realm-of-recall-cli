@@ -9,7 +9,7 @@ import {
 } from "../../types/index.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
 import { QualityFeedback } from "../shared/QualityFeedback.js";
-import { generateHint, getMaxHintLevel, isFullReveal } from "../../core/cards/HintGenerator.js";
+import { generateHint, getMaxHintLevel, isFullReveal, generatePartialCue } from "../../core/cards/HintGenerator.js";
 import { FlashcardFace } from "./FlashcardFace.js";
 import { ProgressBar } from "../common/ProgressBar.js";
 import { getDatabase } from "../../data/database.js";
@@ -480,6 +480,7 @@ export function ReviewScreen({
     mode === RetrievalMode.Standard ? "Standard"
     : mode === RetrievalMode.Reversed ? "Reversed"
     : mode === RetrievalMode.Teach ? "Teach"
+    : mode === RetrievalMode.Generate ? "Generate"
     : "Connect";
 
   return (
@@ -538,6 +539,15 @@ export function ReviewScreen({
           {!isFullReveal(hintLevel + 1) ? (
             <Text dimColor>  [H] more</Text>
           ) : null}
+        </Box>
+      )}
+
+      {/* Generate mode: show partial cue */}
+      {mode === RetrievalMode.Generate && phase === "question" && effectiveCard && (
+        <Box marginTop={1}>
+          <Text color="magenta" bold>
+            Cue: {generatePartialCue(effectiveCard.back)}
+          </Text>
         </Box>
       )}
 

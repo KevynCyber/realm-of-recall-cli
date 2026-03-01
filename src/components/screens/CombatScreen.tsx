@@ -16,6 +16,7 @@ import type { CombatState } from "../../core/combat/CombatEngine.js";
 import { QualityFeedback } from "../shared/QualityFeedback.js";
 import { rollLoot } from "../../core/combat/LootTable.js";
 import { evaluateAnswer } from "../../core/cards/CardEvaluator.js";
+import { generatePartialCue } from "../../core/cards/HintGenerator.js";
 import { getEffectiveStats } from "../../core/player/PlayerStats.js";
 import { EnemyDisplay } from "../combat/EnemyDisplay.js";
 import { EncounterPreview } from "../combat/EncounterPreview.js";
@@ -800,6 +801,11 @@ export function CombatScreen({
       {phase === "card" && currentCard && !cardActionMsg && (
         <>
           <FlashcardFace card={currentCard} showAnswer={false} evolutionTier={currentTier} cardHealth={currentHealth} isRetry={(requeueCounts.get(currentCard.id) ?? 0) > 0 && combat.currentCardIndex >= cards.length} variant={currentVariant as any} />
+          {retrievalMode === RetrievalMode.Generate && (
+            <Box marginTop={1}>
+              <Text color="magenta" bold>Cue: {generatePartialCue(currentCard.back)}</Text>
+            </Box>
+          )}
           <Box marginTop={1}>
             <Text bold>Your answer: </Text>
             <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
