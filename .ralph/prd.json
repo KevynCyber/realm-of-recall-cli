@@ -540,7 +540,7 @@
         "Tests pass"
       ],
       "priority": 29,
-      "passes": false,
+      "passes": true,
       "notes": "Schema-first story. The enforcement and UI (US-030) depends on this. Follows Slay the Spire's gradual unlock model — gating complexity prevents overwhelming new players."
     },
     {
