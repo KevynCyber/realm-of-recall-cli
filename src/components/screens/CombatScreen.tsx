@@ -3,7 +3,7 @@ import { Box, Text, useInput } from "ink";
 import TextInput from "ink-text-input";
 import type { Card, CombatResult, Equipment } from "../../types/index.js";
 import { AnswerQuality, RetrievalMode } from "../../types/index.js";
-import type { Enemy } from "../../types/combat.js";
+import type { Enemy, CombatCardResult } from "../../types/combat.js";
 import type { Player } from "../../types/player.js";
 import {
   createCombatState,
@@ -120,6 +120,9 @@ export function CombatScreen({
   const [victory, setVictory] = useState(false);
   const [lootDismissed, setLootDismissed] = useState(false);
   const [combatResult, setCombatResult] = useState<CombatResult | null>(null);
+
+  // Per-card answer quality tracking for FSRS scheduling
+  const [cardResults, setCardResults] = useState<CombatCardResult[]>([]);
 
   // Ability state
   const [currentSp, setCurrentSp] = useState(player.skillPoints);
@@ -349,6 +352,9 @@ export function CombatScreen({
       }
       setLastQuality(quality);
 
+      // Track per-card answer quality for FSRS scheduling
+      setCardResults((prev) => [...prev, { cardId: currentCard.id, quality }]);
+
       // Apply active effects to attack power
       let attackPower = stats.attack;
       let critChance = stats.critChancePct;
@@ -555,6 +561,7 @@ export function CombatScreen({
           perfectCount: combat.stats.perfectCount,
           correctCount: combat.stats.correctCount,
           playerHpRemaining: combat.playerHp,
+          cardResults,
         };
         setCombatResult(result);
         setPhase("reflection");
