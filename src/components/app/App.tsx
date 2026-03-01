@@ -1213,6 +1213,8 @@ export default function App() {
             combatSettings={combatSettings}
             retrievalMode={currentRetrievalMode}
             startingHpOverride={isDungeonFloor ? dungeonCombatStartHp : undefined}
+            isDungeonFloor={isDungeonFloor}
+            onRetreat={() => setScreen("hub")}
             onComplete={handleCombatComplete}
           />
         ) : (
